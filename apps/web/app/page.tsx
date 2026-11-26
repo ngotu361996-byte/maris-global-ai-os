@@ -11,10 +11,6 @@ export default function Home() {
   const [me, setMe] = useState<MeResponse | null>(null);
 
   useEffect(() => {
-    if (!session.token()) {
-      router.replace('/login');
-      return;
-    }
     api<MeResponse>('/auth/me')
       .then((m) => {
         if (m.memberships[0]) session.setTenant(m.memberships[0].tenantId);

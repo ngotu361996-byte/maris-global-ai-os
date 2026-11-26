@@ -8,7 +8,7 @@ Trạng thái hiện tại: xem [PROJECT_STATUS.md](PROJECT_STATUS.md).
 ## Cấu trúc
 
 ```
-apps/api          NestJS API (/api/v1): auth, MFA, tenant, RBAC, audit
+apps/api          NestJS API (/api/v1): auth, MFA, tenant, RBAC, thành viên, Secret Vault, audit, outbox
 apps/web          Next.js: giao diện Command Center 5 vùng
 packages/contracts  Schema Zod + kiểu dữ liệu dùng chung cho API và web
 packages/db       Migration SQL (nguồn chuẩn cho DDL + RLS), schema Drizzle, UUIDv7
@@ -26,7 +26,7 @@ Cần: Git, Node 22, pnpm 10 (`corepack enable`), Docker Desktop.
 git clone https://github.com/ngotu361996-byte/maris-global-ai-os C:\dev\maris-global-ai-os
 cd C:\dev\maris-global-ai-os
 copy .env.example .env
-# Sinh khóa MFA rồi dán vào MFA_ENCRYPTION_KEY trong .env:
+# Chạy lệnh này 2 lần, dán 2 khóa khác nhau vào MFA_ENCRYPTION_KEY và VAULT_MASTER_KEY trong .env:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 docker compose up -d
 pnpm install
@@ -40,7 +40,7 @@ Mở http://localhost:3000, chọn **Khởi tạo chủ hệ thống** để t�
 ## Kiểm thử
 
 ```bash
-pnpm test       # unit + e2e (e2e cần Postgres đang chạy và đã tạo role maris_app)
+pnpm test       # unit + e2e (cần Postgres + Redis đang chạy và đã tạo role maris_app)
 pnpm typecheck
 ```
 
@@ -49,4 +49,5 @@ pnpm typecheck
 - Không bao giờ commit secret. API key chỉ vào Secret Vault, không dán vào chat hay code.
 - Mọi bảng nghiệp vụ có `tenant_id` và Row-Level Security; API chạy bằng role `maris_app` không có quyền vượt RLS.
 - `security.audit_logs` chỉ được INSERT, có chuỗi hash; `GET /api/v1/audit-logs/verify` kiểm tra toàn vẹn.
+- Secret (API key…) chỉ nhập qua `POST /api/v1/secrets`; không API nào trả lại giá trị. Module khác dùng `secret://<id>`.
 - Giao diện không điền số mẫu: chưa có dữ liệu thì hiển thị “Chưa kết nối”.

@@ -4,7 +4,7 @@
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": { "dependsOn": ["^build"] },
-    "test": { "dependsOn": ["^build"], "env": ["DATABASE_URL", "DATABASE_ADMIN_URL", "MFA_ENCRYPTION_KEY"] },
+    "test": { "dependsOn": ["^build"], "env": ["DATABASE_URL", "DATABASE_ADMIN_URL", "MFA_ENCRYPTION_KEY", "VAULT_MASTER_KEY", "REDIS_URL"] },
     "dev": { "cache": false, "persistent": true, "dependsOn": ["^build"] }
   }
 }

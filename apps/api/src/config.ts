@@ -8,6 +8,16 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
+  VAULT_MASTER_KEY: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded'),
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
+  OUTBOX_RELAY_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  INVITATION_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  NODE_ENV: z.string().default('development'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

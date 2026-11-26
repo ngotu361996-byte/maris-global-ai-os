@@ -10,6 +10,8 @@ export const PERMISSIONS = [
   'roles.read',
   'roles.manage',
   'audit.read',
+  'secrets.read',
+  'secrets.manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

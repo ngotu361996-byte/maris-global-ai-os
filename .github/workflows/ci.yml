@@ -22,9 +22,15 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U maris -d maris" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     env:
       DATABASE_ADMIN_URL: postgres://maris:maris_dev@localhost:5432/maris
       DATABASE_URL: postgres://maris_app:maris_app_dev@localhost:5432/maris
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,9 +50,10 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm db:migrate
-      - name: Test (MFA key generated per run)
+      - name: Test (encryption keys generated per run)
         run: |
           export MFA_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
+          export VAULT_MASTER_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
           pnpm test
       - name: Dependency audit (high and critical)
         run: pnpm audit --audit-level high

@@ -1,4 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { APP_CONFIG, type AppConfig } from './config';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -7,6 +8,11 @@ import { HealthController } from './health/health.controller';
 import { RolesController } from './roles/roles.controller';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { TenantsController } from './tenants/tenants.controller';
+import { MembersModule } from './members/members.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { RateLimitGuard } from './ratelimit/rate-limit.guard';
+import { RedisModule } from './redis/redis.module';
+import { SecretsModule } from './secrets/secrets.module';
 
 @Module({})
 export class AppModule {
@@ -14,9 +20,9 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DbModule, AuditModule, AuthModule, TenancyModule],
+      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule],
       controllers: [HealthController, TenantsController, RolesController],
-      providers: [{ provide: APP_CONFIG, useValue: config }],
+      providers: [{ provide: APP_CONFIG, useValue: config }, { provide: APP_GUARD, useClass: RateLimitGuard }],
       exports: [APP_CONFIG],
     };
   }

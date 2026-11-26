@@ -107,3 +107,40 @@ export const auditLogs = security.table('audit_logs', {
   prevHash: text('prev_hash').notNull(),
   hash: text('hash').notNull(),
 });
+
+export const invitations = identity.table('invitations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  email: text('email').notNull(),
+  roleId: uuid('role_id').notNull(),
+  tokenHash: bytea('token_hash').notNull(),
+  invitedBy: uuid('invited_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  expiresAt: ts('expires_at').notNull(),
+  acceptedAt: ts('accepted_at'),
+  acceptedBy: uuid('accepted_by'),
+  revokedAt: ts('revoked_at'),
+});
+
+export const secrets = security.table('secrets', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  ciphertext: text('ciphertext').notNull(),
+  keyVersion: integer('key_version').notNull().default(1),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const work = pgSchema('work');
+
+export const outboxEvents = work.table('outbox_events', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  publishedAt: ts('published_at'),
+  attempts: integer('attempts').notNull().default(0),
+});

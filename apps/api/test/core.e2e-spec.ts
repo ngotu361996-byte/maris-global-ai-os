@@ -31,7 +31,7 @@ describe('Core Platform (e2e)', () => {
 
   it('reports health', async () => {
     const res = await http.get('/api/v1/health').expect(200);
-    expect(res.body).toMatchObject({ status: 'ok', database: 'up' });
+    expect(res.body).toMatchObject({ status: 'ok', database: 'up', redis: 'up' });
   });
 
   it('rejects a weak bootstrap password with a structured error', async () => {
