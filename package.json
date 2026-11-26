@@ -1,0 +1,28 @@
+{
+  "name": "maris-global-ai-os",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @maris/db migrate",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "22.20.7",
+    "prettier": "3.10.1",
+    "turbo": "2.11.13",
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.33"
+    }
+  }
+}
