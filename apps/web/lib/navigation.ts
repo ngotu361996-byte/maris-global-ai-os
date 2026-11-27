@@ -11,7 +11,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   { title: 'Nội dung', items: [{ code: 'M09', name: 'Kho nội dung gốc' }, { code: 'M10', name: 'Kho thành phẩm' }, { code: 'M11', name: 'Video AI' }] },
   { title: 'Kênh', items: [{ code: 'M17', name: 'Meta' }, { code: 'M18', name: 'Google' }, { code: 'M19', name: 'TikTok' }, { code: 'M20', name: 'YouTube' }] },
   { title: 'Bán hàng', items: [{ code: 'M22', name: 'Shopify' }, { code: 'M26', name: 'POSCake' }] },
-  { title: 'Dữ liệu', items: [{ code: 'M08', name: 'Workflow (dây chuyền)', href: '/workflows' }] },
+  { title: 'Dữ liệu', items: [{ code: 'M08', name: 'Workflow (dây chuyền)', href: '/workflows' }, { code: 'M35', name: 'Connector', href: '/connectors' }] },
   { title: 'Hạ tầng', items: [{ code: 'INF', name: 'VPS, Worker, GPU' }] },
   {
     title: 'Hệ thống',

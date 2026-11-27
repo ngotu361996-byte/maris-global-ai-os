@@ -1,13 +1,13 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 10)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 11)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
-| 4. Skills, Workflow, Connector, Plugin | Sprint 9 (Skill) đã merge; Sprint 10 (Workflow Studio) đang review; tiếp theo Sprint 11 Connector Hub. Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
+| 4. Skills, Workflow, Connector, Plugin | Sprint 9 (Skill) và Sprint 10 (Workflow Studio) đã merge; Sprint 11 (Connector Hub) đang review. Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -113,4 +113,18 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Chạy thật: chỉ người có `ai.approve` bắt đầu được; bắt đầu chạy là duyệt chi phí tới ngân sách đã nhập. Bước AI/Skill thành công việc đã duyệt sẵn (vẫn qua Dừng khẩn cấp, ngân sách tháng, mức quyền Agent). Bước Duyệt dừng chờ người có `ai.approve`
 - Xem đầu vào, đầu ra, chi phí từng bước; tạm dừng, tiếp tục, hủy (hủy cả công việc AI đang chạy), chạy tiếp từ điểm lưu sau khi lỗi hoặc hủy
 - Giới hạn số lượt chạy bước mỗi lần (mặc định 50, tối đa 200) chặn vòng lặp; ngân sách lần chạy chặn chi phí
-- Giới hạn: thiết kế bằng danh sách bước (chưa kéo thả trên sơ đồ); chưa có bước Hẹn giờ, Webhook, Connector, gọi API, Dữ liệu, Song song, Gộp, Worker, Thông báo, Xử lý lỗi (cần Connector Hub và sandbox); chưa chia sẻ giữa các workspace ngoài xuất/nhập tệp
+- Giới hạn: thiết kế bằng danh sách bước (chưa kéo thả trên sơ đồ); chưa có bước Hẹn giờ, Dữ liệu, Song song, Gộp, Worker, Thông báo, Xử lý lỗi (cần sandbox); chưa chia sẻ giữa các workspace ngoài xuất/nhập tệp. Bước Connector và Webhook có từ Sprint 11
+
+## Sprint 11 – Connector Hub (Giai đoạn 4)
+
+- Migration `0011`: schema `integration` với `connectors`, `connector_calls`, `webhook_events` (RLS theo tenant)
+- Connector gọi API (REST; GraphQL qua POST): địa chỉ gốc, cách đăng nhập (Bearer, header riêng, tham số, khóa trong đường dẫn) lấy khóa từ Secret Vault theo **tên**, header cố định, thời gian tối đa (1–60 giây)
+- Capability Registry: mỗi thao tác khai báo phương thức, đường dẫn, tham số, nội dung JSON, ô nhập và mức rủi ro (chỉ đọc / gửi ra ngoài). Ô nhập chỉ điền vào chỗ được đánh dấu: trong đường dẫn được mã hóa thành một đoạn (chặn `..`), trong JSON được thoát ký tự để không phá cấu trúc
+- Permission Scope: quản lý (`ai.manage`) tạo, sửa, thử thao tác chỉ đọc; thử thao tác gửi ra ngoài và Kích hoạt cần `ai.approve`. Connector mới, mẫu, nhập từ tệp, hoặc vừa đổi địa chỉ/khóa/thao tác đều quay về “Chưa kích hoạt”. Dừng khẩn cấp chặn mọi lần gọi
+- Chống SSRF: chỉ https tới địa chỉ công khai; địa chỉ IP được kiểm tra lúc kết nối (chống đổi DNS); không theo chuyển hướng; tối đa 256 KB kết quả. `CONNECTOR_ALLOW_PRIVATE_URLS=true` cho n8n trên máy hoặc mạng nội bộ
+- Nhật ký gọi: địa chỉ đã che khóa, mã HTTP, thời gian, kết quả (khóa bị che nếu bên kia trả lại); audit mỗi lần gọi. Ô nhập không lưu vào nhật ký
+- Bước **Connector** trong Workflow: gọi một thao tác của Connector đang bật, ô nhập dùng `{{input.x}}`/`{{steps.y}}`; kết quả là dữ liệu, được bọc `<workflow_data>` khi đưa cho AI. Chạy thử không gọi ra ngoài
+- Connector **nhận Webhook**: `POST /api/v1/hooks/<tenant>/<connector>` với header `X-Maris-Token` (chỉ lưu SHA-256 của mã, mã hiện một lần, đổi mã là mã cũ hết hiệu lực); có thể chạy một Workflow dưới tên người đã Kích hoạt (phải còn `ai.approve`), chỉ lấy các ô trùng tên ô nhập, ngân sách mỗi lần tối đa $5; giới hạn 60 lần/phút mỗi IP
+- 4 Connector mẫu: Telegram Bot, GitHub, n8n, Nhận đánh giá từ bên ngoài. Xuất/nhập tệp `maris.connector/v1` (không chứa khóa, kiểm tra checksum)
+- Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
+- Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”

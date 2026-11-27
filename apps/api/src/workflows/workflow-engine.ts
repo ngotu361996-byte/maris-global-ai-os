@@ -127,6 +127,12 @@ export function simulate(
         aiSteps += 1;
         maxBudgetUsd += skillBudget(n.skillKey);
         break;
+      case 'connector':
+        inputText = Object.entries(n.inputs)
+          .map(([k, v]) => `${k}: ${render(v, state)}`)
+          .join('\n');
+        output = `[chạy thử: không gọi Connector ${n.connectorKey} (${n.capability})]`;
+        break;
       case 'condition': {
         const v = render(n.value, state);
         const ok = evaluate(n.operator, v, n.compare);

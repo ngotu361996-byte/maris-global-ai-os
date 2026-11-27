@@ -24,7 +24,7 @@ import { DbService, type Tx } from '../db/db.service';
 import type { Ctx } from '../ai/chat.service';
 import { graphChecksum } from './workflow-engine';
 
-const { workflowDefinitions, workflowVersions, aiSkills, aiAgents } = schema;
+const { workflowDefinitions, workflowVersions, aiSkills, aiAgents, connectors } = schema;
 export type WorkflowRow = typeof workflowDefinitions.$inferSelect;
 type VersionRow = typeof workflowVersions.$inferSelect;
 
@@ -383,6 +383,27 @@ export class WorkflowsService {
     return row;
   }
 
+  /** The current version's graph of a workflow, by key; for webhook connectors. */
+  async findByKey(
+    tx: Tx,
+    tenantId: string,
+    key: string,
+  ): Promise<{ id: string; graph: WorkflowGraph } | null> {
+    const [row] = await tx
+      .select()
+      .from(workflowDefinitions)
+      .where(
+        and(
+          eq(workflowDefinitions.tenantId, tenantId),
+          eq(workflowDefinitions.key, key),
+          isNull(workflowDefinitions.deletedAt),
+        ),
+      );
+    if (!row) return null;
+    const v = await this.version(tx, row.id, row.version);
+    return { id: row.id, graph: v.graph as WorkflowGraph };
+  }
+
   async version(tx: Tx, workflowId: string, version: number): Promise<VersionRow> {
     const [v] = await tx
       .select()
@@ -457,6 +478,40 @@ export class WorkflowsService {
           ),
         );
       for (const k of agentKeys) if (!found.some((f) => f.key === k)) missing.push(`Agent "${k}"`);
+    }
+    const connectorNodes = graph.nodes.flatMap((n) => (n.type === 'connector' ? [n] : []));
+    if (connectorNodes.length) {
+      const found = await tx
+        .select()
+        .from(connectors)
+        .where(
+          and(
+            eq(connectors.tenantId, tenantId),
+            inArray(connectors.key, [...new Set(connectorNodes.map((n) => n.connectorKey))]),
+            isNull(connectors.deletedAt),
+          ),
+        );
+      for (const n of connectorNodes) {
+        const c = found.find((f) => f.key === n.connectorKey && f.kind === 'http');
+        if (!c) {
+          missing.push(`Connector "${n.connectorKey}"`);
+          continue;
+        }
+        const cap = c.capabilities.find((x) => x.key === n.capability);
+        if (!cap) {
+          missing.push(`thao tác "${n.capability}" của Connector "${n.connectorKey}"`);
+          continue;
+        }
+        const unknown = Object.keys(n.inputs).filter(
+          (name) => !cap.inputs.some((f) => f.name === name),
+        );
+        if (unknown.length) {
+          throw new BadRequestException({
+            code: 'WORKFLOW_INVALID',
+            message: `Bước "${n.label}": thao tác "${n.capability}" không có ô ${unknown.join(', ')}`,
+          });
+        }
+      }
     }
     if (missing.length) {
       throw new BadRequestException({

@@ -75,9 +75,17 @@ Bước Duyệt đặt trạng thái `waiting_approval`; bước Chờ dùng job
 `budget_usd` chặn chi phí. Điểm lưu ghi `{nodeId, outputs}` để `restore` chạy tiếp mà không làm lại các bước trước.
 `simulate` (chạy thử) là hàm thuần, không ghi gì.
 
+Connector (`apps/api/src/connectors`, Giai đoạn 4): khai báo ở `integration.connectors` (địa chỉ, `auth` trỏ tên secret, danh sách
+thao tác). `buildRequest` là hàm thuần dựng yêu cầu từ thao tác và ô nhập; `connectorRequest` gửi bằng `node:http(s)` với `lookup`
+riêng từ chối địa chỉ nội bộ lúc kết nối, không theo redirect, có hạn giờ và giới hạn dung lượng. Mỗi lần gọi có một dòng
+`connector_calls` (`pending` → `ok`/`failed`): `prepare` ghi dòng trong transaction, `execute` gọi ra ngoài **sau** khi transaction
+đóng rồi ghi kết quả và audit. Bước Connector của Workflow chờ với `wait = {kind:'connector', callId}`; khi gọi xong, run được
+xếp lại hàng đợi. Webhook vào (`workflows/webhook-intake.ts`) không có phiên đăng nhập: mã `X-Maris-Token` so khớp SHA-256
+bằng `timingSafeEqual`, rồi `WorkflowRunsService.start` chạy dưới tên người đã kích hoạt Connector.
+
 ## Dữ liệu
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

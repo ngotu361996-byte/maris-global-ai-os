@@ -13,13 +13,15 @@ export const WORKFLOW_MAX_NODES = 30;
 export const WORKFLOW_MAX_STEPS = 200;
 
 /**
- * Step types available now (spec Part 22). Schedule, webhook, connector, API, data, switch, parallel,
- * merge, worker, notification and error-handler steps come with the Connector Hub and the sandbox.
+ * Step types available now (spec Part 22). A connector step calls one capability of an active
+ * connector. Schedule, data, switch, parallel, merge, worker, notification and error-handler steps
+ * come with later phases and the sandbox. A webhook connector can start a workflow.
  */
 export const WORKFLOW_NODE_TYPES = [
   'trigger',
   'ai',
   'skill',
+  'connector',
   'condition',
   'approval',
   'delay',
@@ -31,6 +33,7 @@ export const WORKFLOW_NODE_LABEL: Record<WorkflowNodeType, string> = {
   trigger: 'Bắt đầu',
   ai: 'AI',
   skill: 'Skill',
+  connector: 'Connector',
   condition: 'Điều kiện',
   approval: 'Duyệt',
   delay: 'Chờ',
@@ -113,6 +116,13 @@ export const workflowNodeSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     ...base,
+    type: z.literal('connector'),
+    connectorKey: z.string().max(64),
+    capability: z.string().max(40),
+    inputs: z.record(z.string(), template(SKILL_INPUT_MAX_CHARS)),
+  }),
+  z.object({
+    ...base,
     type: z.literal('condition'),
     value: template(2000),
     operator: z.enum(CONDITION_OPERATORS),
@@ -147,6 +157,7 @@ export function nodeTemplates(n: WorkflowNode): string[] {
     case 'ai':
       return [n.prompt];
     case 'skill':
+    case 'connector':
       return Object.values(n.inputs);
     case 'condition':
       return [n.value];
@@ -284,7 +295,7 @@ export interface WorkflowRunResponse {
   status: WorkflowRunStatus;
   input: Record<string, string | number>;
   currentNode: string | null;
-  waitingFor: 'task' | 'approval' | 'delay' | null;
+  waitingFor: 'task' | 'approval' | 'delay' | 'connector' | null;
   budgetUsd: number;
   costUsd: number;
   stepsTaken: number;
