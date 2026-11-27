@@ -168,6 +168,7 @@ export default function TasksPage() {
                       {t.progress && t.status !== 'completed' ? ` · ${t.progress}` : ''} · {agentName(t.agentId)} · ngân sách ${t.budgetUsd} · đã
                       dùng ${t.costUsd.toFixed(4)} · {new Date(t.updatedAt).toLocaleString('vi-VN')}
                       {t.skillVersion ? ` · từ Skill v${t.skillVersion}` : ''}
+                      {t.workflowRunId ? ' · từ Workflow' : ''}
                     </div>
                   </button>
                   <div className="flex flex-wrap gap-1">

@@ -1,13 +1,13 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 9)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 10)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
-| 4. Skills, Workflow, Connector, Plugin | Sprint 9 (Skill) đang review; tiếp theo Sprint 10 Workflow Studio, Sprint 11 Connector Hub. Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
+| 4. Skills, Workflow, Connector, Plugin | Sprint 9 (Skill) đã merge; Sprint 10 (Workflow Studio) đang review; tiếp theo Sprint 11 Connector Hub. Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -93,7 +93,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Khi mọi việc đã kết thúc, MARIS tổng hợp báo cáo (kết quả, việc chưa xong, rủi ro, đề xuất cải tiến, bước tiếp theo cần duyệt). Kết quả công việc được đưa vào thẻ `<task_result>` như dữ liệu
 - Giới hạn: chưa sửa được từng bước trước khi tạo công việc (bỏ kế hoạch và lập lại); các bước chạy độc lập, chưa có thứ tự phụ thuộc; chưa có Skill/Workflow/Worker để chọn (Giai đoạn 4–5)
 
-## Sprint 9 – Skill (Giai đoạn 4)
+## Sprint 9 – Skill (Giai đoạn 4, đã merge)
 
 - Migration `0009`: bảng `ai.skills` (RLS theo tenant); cột `skill_id`, `skill_version`, `skill_prompt`, `timeout_sec` cho `ai.tasks`
 - Skill theo đặc tả Phần 23: mã, tên, phiên bản, tác giả, mô tả, ô nhập (văn bản, đoạn dài, số, lựa chọn), hướng dẫn cho AI, tiêu chí đạt, quyền xin, phụ thuộc, tương thích, ví dụ, mức quyền, ngân sách, thời gian tối đa, checksum, trạng thái
@@ -103,3 +103,14 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Dữ liệu người dùng nhập vào Skill được bọc trong thẻ `<skill_input>` như dữ liệu, không phải mệnh lệnh
 - Chỉ `ai.manage` tạo, sửa, nhập, xóa Skill; ai có `ai.chat` xem, xuất và chạy được
 - Giới hạn: chưa có phụ thuộc giữa các Skill, chưa có chữ ký số của tác giả (chỉ checksum), chưa có kho Skill chung; AI Tổng điều hành chưa tự chọn Skill
+
+## Sprint 10 – Workflow Studio (Giai đoạn 4)
+
+- Migration `0010`: `work.workflow_definitions`, `work.workflow_versions` (không sửa được sau khi ghi), `work.workflow_runs`, `work.workflow_run_steps` (RLS theo tenant); cột `workflow_run_id`, `workflow_node_id` cho `ai.tasks`
+- Các loại bước: Bắt đầu (ô nhập), AI, Skill, Điều kiện (7 phép so sánh, rẽ nhánh, quay lại để lặp), Duyệt, Chờ (tối đa 1 ngày), Điểm lưu, Kết thúc. Bước dùng `{{input.x}}` và `{{steps.y}}`; dữ liệu đưa cho AI được bọc trong `<workflow_data>`
+- Trang `/workflows`: tạo, sửa từng bước (mỗi lần lưu là một phiên bản), sao chép, xuất/nhập tệp `maris.workflow/v1` (kiểm tra checksum, Skill và Agent phải có sẵn; nhập vào ở trạng thái tắt), khôi phục phiên bản cũ, 2 Workflow mẫu dùng Skill mẫu
+- Chạy thử: đi theo dây chuyền với kết quả giả, không gọi AI, không tốn tiền, báo số bước AI và chi phí tối đa
+- Chạy thật: chỉ người có `ai.approve` bắt đầu được; bắt đầu chạy là duyệt chi phí tới ngân sách đã nhập. Bước AI/Skill thành công việc đã duyệt sẵn (vẫn qua Dừng khẩn cấp, ngân sách tháng, mức quyền Agent). Bước Duyệt dừng chờ người có `ai.approve`
+- Xem đầu vào, đầu ra, chi phí từng bước; tạm dừng, tiếp tục, hủy (hủy cả công việc AI đang chạy), chạy tiếp từ điểm lưu sau khi lỗi hoặc hủy
+- Giới hạn số lượt chạy bước mỗi lần (mặc định 50, tối đa 200) chặn vòng lặp; ngân sách lần chạy chặn chi phí
+- Giới hạn: thiết kế bằng danh sách bước (chưa kéo thả trên sơ đồ); chưa có bước Hẹn giờ, Webhook, Connector, gọi API, Dữ liệu, Song song, Gộp, Worker, Thông báo, Xử lý lỗi (cần Connector Hub và sandbox); chưa chia sẻ giữa các workspace ngoài xuất/nhập tệp

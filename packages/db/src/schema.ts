@@ -297,6 +297,8 @@ export const aiTasks = ai.table('tasks', {
   skillVersion: text('skill_version'),
   skillPrompt: text('skill_prompt'),
   timeoutSec: integer('timeout_sec'),
+  workflowRunId: uuid('workflow_run_id'),
+  workflowNodeId: text('workflow_node_id'),
   status: text('status').$type<AiTaskStatus>().notNull().default('pending'),
   progress: text('progress'),
   approvedBy: uuid('approved_by'),
@@ -486,4 +488,78 @@ export const aiSkills = ai.table('skills', {
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   deletedAt: ts('deleted_at'),
+});
+
+/** The workflow graph as stored; its shape is validated by the API (contracts `workflowGraphSchema`). */
+export interface WorkGraphData {
+  maxSteps: number;
+  nodes: ({ id: string; type: string; label: string; next?: string | null } & Record<string, unknown>)[];
+}
+export type WorkflowRunStatus = 'running' | 'waiting_approval' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type WorkflowWait = { kind: 'task'; taskId: string } | { kind: 'approval' } | { kind: 'delay'; until: string };
+
+export const workflowDefinitions = work.table('workflow_definitions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  source: text('source').$type<'template' | 'created' | 'imported' | 'copied'>().notNull(),
+  status: text('status').$type<'active' | 'paused'>().notNull().default('active'),
+  version: integer('version').notNull().default(1),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const workflowVersions = work.table('workflow_versions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  workflowId: uuid('workflow_id').notNull(),
+  version: integer('version').notNull(),
+  graph: jsonb('graph').$type<WorkGraphData>().notNull(),
+  checksum: text('checksum').notNull(),
+  note: text('note'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const workflowRuns = work.table('workflow_runs', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  workflowId: uuid('workflow_id').notNull(),
+  version: integer('version').notNull(),
+  status: text('status').$type<WorkflowRunStatus>().notNull(),
+  input: jsonb('input').$type<Record<string, string | number>>().notNull(),
+  outputs: jsonb('outputs').$type<Record<string, string>>().notNull().default({}),
+  currentNode: text('current_node'),
+  wait: jsonb('wait').$type<WorkflowWait | null>(),
+  checkpoint: jsonb('checkpoint').$type<{ nodeId: string | null; outputs: Record<string, string> } | null>(),
+  stepsTaken: integer('steps_taken').notNull().default(0),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).notNull(),
+  costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  startedBy: uuid('started_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
+});
+
+export const workflowRunSteps = work.table('workflow_run_steps', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  runId: uuid('run_id').notNull(),
+  seq: integer('seq').notNull(),
+  nodeId: text('node_id').notNull(),
+  nodeType: text('node_type').notNull(),
+  label: text('label').notNull(),
+  status: text('status').$type<'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'>().notNull(),
+  input: text('input'),
+  output: text('output'),
+  taskId: uuid('task_id'),
+  costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
+  startedAt: ts('started_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
 });

@@ -67,6 +67,14 @@ Skill (`skills.service.ts`, Giai đoạn 4): bản ghi khai báo trong `ai.skill
 `TASK_TIMEOUT`. Checksum là SHA-256 của `canonicalJson` (khóa sắp xếp) phần thân manifest không gồm `checksum`; `import`
 kiểm tra Zod, quyền (`ai.generate_text`), phụ thuộc rỗng và checksum, rồi lưu Skill ở trạng thái `paused`.
 
+Workflow (`apps/api/src/workflows`, Giai đoạn 4): định nghĩa ở `work.workflow_definitions`, các bước ở `work.workflow_versions`
+(mỗi lần lưu một bản, lần chạy giữ phiên bản lúc bắt đầu). `WorkflowRunsService.advance` chạy trên hàng đợi `maris-workflows`,
+khóa dòng lần chạy (`FOR UPDATE`) rồi đi qua các bước cho tới khi phải chờ: bước AI/Skill tạo công việc đã duyệt sẵn
+(`TasksService.insert` với `approvedBy` = người bắt đầu) và chờ; `TasksService.onFinished` báo khi công việc kết thúc để chạy tiếp.
+Bước Duyệt đặt trạng thái `waiting_approval`; bước Chờ dùng job trễ của BullMQ. `steps_taken` so với `maxSteps` chặn vòng lặp,
+`budget_usd` chặn chi phí. Điểm lưu ghi `{nodeId, outputs}` để `restore` chạy tiếp mà không làm lại các bước trước.
+`simulate` (chạy thử) là hàm thuần, không ghi gì.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
