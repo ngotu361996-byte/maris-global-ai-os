@@ -14,6 +14,7 @@ export const PERMISSIONS = [
   'secrets.manage',
   'ai.chat',
   'ai.manage',
+  'ai.memory',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -22,6 +23,6 @@ export type PermissionKey = (typeof PERMISSIONS)[number];
 export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
   owner: PERMISSIONS,
   administrator: PERMISSIONS,
-  manager: ['tenant.read', 'members.read', 'roles.read', 'ai.chat'],
+  manager: ['tenant.read', 'members.read', 'roles.read', 'ai.chat', 'ai.memory'],
   member: ['tenant.read', 'ai.chat'],
 };

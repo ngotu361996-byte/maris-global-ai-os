@@ -352,7 +352,7 @@ export default function AiProvidersPage() {
               </tbody>
             </table>
           )}
-          <p className="mt-2 text-xs text-muted">Chi phí chỉ tính khi bạn nhập giá cho từng AI. Ngân sách và cảnh báo 80% có ở Sprint 4.</p>
+          <p className="mt-2 text-xs text-muted">Chi phí chỉ tính khi bạn nhập giá cho từng AI. Ngân sách và cảnh báo 80% có ở Sprint 5.</p>
         </Panel>
       )}
     </Shell>

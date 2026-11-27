@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
-import type {
-  AiProviderResponse,
-  ChatMessageResponse,
-  ChatStreamEvent,
-  ConversationDetailResponse,
-  ConversationResponse,
+import {
+  CHAT_MODE_INFO,
+  CHAT_MODES,
+  type AgentResponse,
+  type AiProviderResponse,
+  type ChatMessageResponse,
+  type ChatMode,
+  type ChatStreamEvent,
+  type ConversationDetailResponse,
+  type ConversationResponse,
+  type ProjectResponse,
 } from '@maris/contracts';
+import { Markdown } from '@/components/Markdown';
 import { btnCls, inputCls } from '@/components/ui';
 import { api, apiStream } from '@/lib/api';
 
@@ -32,6 +38,11 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [providerId, setProviderId] = useState('');
   const [model, setModel] = useState('');
+  const [agents, setAgents] = useState<AgentResponse[]>([]);
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
+  const [agentId, setAgentId] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [mode, setMode] = useState<ChatMode>('chat');
   const [text, setText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +56,8 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
 
   useEffect(() => {
     api<AiProviderResponse[]>('/ai/providers').then(setProviders).catch((e: Error) => setError(e.message));
+    api<AgentResponse[]>('/ai/agents').then(setAgents).catch(() => undefined);
+    api<ProjectResponse[]>('/ai/projects').then(setProjects).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -61,6 +74,9 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
         setMessages(c.messages);
         setProviderId(c.providerId ?? '');
         setModel(c.model ?? '');
+        setAgentId(c.agentId ?? '');
+        setProjectId(c.projectId ?? '');
+        setMode(c.mode);
       })
       .catch((e: Error) => setError(e.message));
   }, [conversationId]);
@@ -93,7 +109,13 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
       if (!id) {
         const conv = await api<ConversationResponse>('/ai/conversations', {
           method: 'POST',
-          body: JSON.stringify({ providerId: providerId || null, model: providerId && model ? model : null }),
+          body: JSON.stringify({
+            providerId: providerId || null,
+            model: providerId && model ? model : null,
+            agentId: agentId || null,
+            projectId: projectId || null,
+            mode,
+          }),
         });
         id = conv.id;
         convRef.current = id;
@@ -142,10 +164,75 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
   }
 
   const chosen = providers.find((p) => p.id === providerId);
+  const activeAgents = agents.filter((a) => a.status === 'active' || a.id === agentId);
+
+  /** Agent, mode and project belong to the conversation: an open one is updated right away. */
+  async function choose(field: 'agentId' | 'projectId' | 'mode', value: string) {
+    if (field === 'agentId') setAgentId(value);
+    else if (field === 'projectId') setProjectId(value);
+    else setMode(value as ChatMode);
+    if (!convRef.current) return;
+    try {
+      await api(`/ai/conversations/${convRef.current}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ [field]: field === 'mode' ? value : value || null }),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Lỗi không xác định');
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className={`flex flex-wrap gap-2 ${compact ? 'mb-2' : 'mb-3'}`}>
+        {activeAgents.length > 0 && (
+          <select
+            value={agentId}
+            onChange={(e) => void choose('agentId', e.target.value)}
+            className={`${inputCls} ${compact ? '' : 'max-w-xs'} py-1.5`}
+            aria-label="Chọn AI Agent"
+            disabled={streaming}
+          >
+            <option value="">MARIS (AI tổng điều hành)</option>
+            {activeAgents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.status === 'paused' ? ' (tạm dừng)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+        {!compact && (
+          <select
+            value={mode}
+            onChange={(e) => void choose('mode', e.target.value)}
+            className={`${inputCls} max-w-[11rem] py-1.5`}
+            aria-label="Chế độ chat"
+            disabled={streaming}
+          >
+            {CHAT_MODES.map((m) => (
+              <option key={m} value={m}>
+                Chế độ: {CHAT_MODE_INFO[m].label}
+              </option>
+            ))}
+          </select>
+        )}
+        {!compact && projects.length > 0 && (
+          <select
+            value={projectId}
+            onChange={(e) => void choose('projectId', e.target.value)}
+            className={`${inputCls} max-w-xs py-1.5`}
+            aria-label="Dự án"
+            disabled={streaming}
+          >
+            <option value="">Không gắn dự án</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                Dự án: {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           value={providerId}
           onChange={(e) => {
@@ -195,10 +282,16 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
                 m.role === 'user' ? 'bg-accent text-black' : 'border border-line bg-panel'
               } ${m.status === 'error' ? 'border-danger' : ''}`}
             >
-              <div className="whitespace-pre-wrap break-words">
-                {m.content || (m.status === 'streaming' ? <span className="text-muted">…</span> : '')}
-                {m.status === 'streaming' && m.content && <span className="ml-0.5 animate-pulse">▍</span>}
-              </div>
+              {m.role === 'user' ? (
+                <div className="whitespace-pre-wrap break-words">{m.content}</div>
+              ) : m.content ? (
+                <>
+                  <Markdown text={m.content} />
+                  {m.status === 'streaming' && <span className="ml-0.5 animate-pulse">▍</span>}
+                </>
+              ) : (
+                m.status === 'streaming' && <span className="text-muted">…</span>
+              )}
               {m.role === 'assistant' && m.status !== 'streaming' && (
                 <div className="mt-1 text-[11px] text-muted">
                   {[

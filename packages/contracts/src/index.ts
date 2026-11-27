@@ -5,3 +5,5 @@ export * from './errors';
 export * from './members';
 export * from './secrets';
 export * from './ai';
+export * from './chat-modes';
+export * from './agents';

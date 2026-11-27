@@ -27,6 +27,11 @@ Circuit breaker lưu trên Redis nên mọi instance API cùng thấy. Key chỉ
 Gửi tin nhắn: transaction 1 ghi tin người dùng + chỗ trống cho câu trả lời + audit; stream không giữ transaction;
 transaction 2 ghi câu trả lời, mọi lượt gọi provider và sự kiện `ai.message.completed`.
 
+System prompt được ghép theo thứ tự cố định (`systemPrompt()` trong `chat.service.ts`): quy tắc an toàn của MARIS → Agent
+(vai trò, prompt, tiêu chí) → chế độ chat → bộ nhớ dự án trong thẻ `<project_memory>` → câu nhắc rằng quy tắc đầu luôn ưu tiên.
+Prompt của Agent và bộ nhớ là dữ liệu của tenant nên không thể bỏ quy tắc an toàn. Agent và dự án dùng chung trong tenant;
+mỗi lần sửa Agent tăng `version` và lưu ảnh chụp cấu hình vào `ai.agent_versions` (chỉ INSERT).
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
