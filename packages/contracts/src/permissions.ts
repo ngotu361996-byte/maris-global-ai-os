@@ -16,6 +16,8 @@ export const PERMISSIONS = [
   'ai.manage',
   'ai.memory',
   'ai.approve',
+  'infra.read',
+  'infra.manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

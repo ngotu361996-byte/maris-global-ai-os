@@ -89,9 +89,15 @@ chạy trong **một** transaction: kiểm tra checksum và chữ ký bằng `@m
 `ext.plugin_components`. Kích hoạt gọi `setStatusIn`/`activateIn` của từng thành phần. Plugin không có mã chạy, nên không cần
 sandbox; Plugin chạy mã sẽ đợi Giai đoạn 5. `packages/sdk` dùng chung cho API và người làm Plugin (lệnh `pnpm ext`).
 
+Thiết bị và Worker (`apps/api/src/devices`, `apps/worker`, Giai đoạn 5): Worker luôn gọi ra máy chủ (đặc tả Phần 26), không có
+kết nối vào máy người dùng. `DeviceAgentController` (`/agent/pair`, `/agent/heartbeat`) không có phiên đăng nhập; tenant lấy từ
+chuỗi ghép nối hoặc khóa thiết bị rồi chạy trong `db.withContext({tenantId})`, như Webhook vào. Chuỗi ghép nối và khóa chỉ lưu
+SHA-256. Mỗi nhịp báo ghi một dòng `infra.device_metrics`, sinh sự kiện khi có cảnh báo mới hoặc khi kết nối lại, và xóa chỉ số
+cũ hơn 24 giờ. Trạng thái trực tuyến tính lúc đọc từ `last_seen_at`, không cần tiến trình nền.
+
 ## Dữ liệu
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `maris_ctx` (hàm ngữ cảnh).
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

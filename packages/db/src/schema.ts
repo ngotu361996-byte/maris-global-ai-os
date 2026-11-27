@@ -7,6 +7,7 @@ import {
   numeric,
   pgSchema,
   primaryKey,
+  real,
   text,
   timestamp,
   uuid,
@@ -709,4 +710,76 @@ export const trustedPublishers = ext.table('trusted_publishers', {
   addedBy: uuid('added_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
   revokedAt: ts('revoked_at'),
+});
+
+export const infra = pgSchema('infra');
+
+export type DeviceKind =
+  | 'server'
+  | 'admin_pc'
+  | 'staff_pc'
+  | 'gpu_worker'
+  | 'media_worker'
+  | 'local_ai_worker'
+  | 'code_runner';
+export interface DeviceInfoData {
+  hostname?: string;
+  os?: string;
+  arch?: string;
+  cpuModel?: string;
+  cpuCores?: number;
+  ramTotalMb?: number;
+  gpus?: { name: string; memTotalMb: number | null }[];
+  agentVersion?: string;
+}
+export interface GpuSampleData {
+  index: number;
+  name: string;
+  utilPct: number | null;
+  memUsedMb: number | null;
+  memTotalMb: number | null;
+  tempC: number | null;
+}
+
+export const devices = infra.table('devices', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  kind: text('kind').$type<DeviceKind>().notNull(),
+  status: text('status').$type<'pending' | 'active' | 'paused' | 'revoked'>().notNull().default('pending'),
+  pairingHash: text('pairing_hash'),
+  pairingExpiresAt: ts('pairing_expires_at'),
+  tokenHash: text('token_hash'),
+  info: jsonb('info').$type<DeviceInfoData>().notNull().default({}),
+  lastSeenAt: ts('last_seen_at'),
+  lastIp: text('last_ip'),
+  pairedAt: ts('paired_at'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const deviceMetrics = infra.table('device_metrics', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  deviceId: uuid('device_id').notNull(),
+  cpuPct: real('cpu_pct'),
+  ramUsedMb: integer('ram_used_mb'),
+  ramTotalMb: integer('ram_total_mb'),
+  diskUsedGb: real('disk_used_gb'),
+  diskTotalGb: real('disk_total_gb'),
+  gpus: jsonb('gpus').$type<GpuSampleData[]>().notNull().default([]),
+  cpuTempC: real('cpu_temp_c'),
+  recordedAt: ts('recorded_at').notNull().defaultNow(),
+});
+
+export const deviceEvents = infra.table('device_events', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  deviceId: uuid('device_id').notNull(),
+  level: text('level').$type<'info' | 'warning' | 'error'>().notNull(),
+  kind: text('kind').notNull(),
+  message: text('message').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
 });

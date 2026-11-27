@@ -13,7 +13,8 @@
     "test": "turbo run test",
     "db:migrate": "pnpm --filter @maris/db migrate",
     "format": "prettier --write .",
-    "ext": "node packages/sdk/dist/cli.js"
+    "ext": "node packages/sdk/dist/cli.js",
+    "worker": "node apps/worker/dist/cli.js"
   },
   "devDependencies": {
     "@types/node": "22.20.7",
