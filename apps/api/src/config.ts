@@ -28,6 +28,9 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  // Uploaded files. Local disk for now; keep this folder in your backups.
+  FILE_STORAGE_DIR: z.string().min(1).default('./data/uploads'),
+  FILE_MAX_MB: z.coerce.number().int().min(1).max(500).default(25),
   NODE_ENV: z.string().default('development'),
 });
 

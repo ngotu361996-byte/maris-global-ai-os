@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CHAT_MODES, type ChatMode } from './chat-modes';
+import { MAX_ATTACHMENTS, type AttachmentRef } from './files';
 
 export const AI_PROVIDER_KINDS = ['openai', 'anthropic', 'gemini', 'ollama', 'openai_compatible'] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
@@ -118,6 +119,8 @@ export type UpdateConversation = z.infer<typeof updateConversationSchema>;
 
 export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
+  /** Files uploaded with POST /ai/files, by the same user. */
+  attachmentIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS).optional(),
   /** Overrides the conversation's provider/model for this message and later ones. */
   providerId: z.string().uuid().nullable().optional(),
   model: modelName.nullable().optional(),
@@ -149,6 +152,8 @@ export interface ChatMessageResponse {
   latencyMs: number | null;
   errorCode: string | null;
   createdAt: string;
+  /** Files sent with a user message. */
+  attachments?: AttachmentRef[];
 }
 
 export interface ConversationDetailResponse extends ConversationResponse {

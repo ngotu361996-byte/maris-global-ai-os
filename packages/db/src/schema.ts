@@ -386,3 +386,21 @@ export const aiCouncilTurns = ai.table('council_turns', {
   latencyMs: integer('latency_ms'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+export type AiFileKind = 'image' | 'text' | 'document' | 'video' | 'audio';
+
+export const aiFiles = ai.table('files', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  uploadedBy: uuid('uploaded_by').notNull(),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  kind: text('kind').$type<AiFileKind>().notNull(),
+  sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+  sha256: text('sha256').notNull(),
+  storageKey: text('storage_key').notNull(),
+  conversationId: uuid('conversation_id'),
+  messageId: uuid('message_id'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});

@@ -10,3 +10,4 @@ export * from './agents';
 export * from './tasks';
 export * from './models';
 export * from './council';
+export * from './files';
