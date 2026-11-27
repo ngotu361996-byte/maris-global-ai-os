@@ -152,12 +152,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         requiredLevel,
         skillId: body.skill?.id ?? null,
         skillVersion: body.skill?.version ?? null,
-        skillPrompt: body.skill?.prompt ?? body.workflow?.prompt ?? null,
+        skillPrompt: body.skill?.prompt ?? body.workflow?.prompt ?? body.content?.prompt ?? null,
         timeoutSec: body.skill?.timeoutSec ?? body.timeoutSec ?? null,
+        contentItemId: body.content?.itemId ?? null,
         workflowRunId: body.workflow?.runId ?? null,
         workflowNodeId: body.workflow?.nodeId ?? null,
         ...(body.approvedBy
-          ? { status: 'queued' as const, approvedBy: body.approvedBy, approvedAt: new Date(), progress: 'Đã duyệt khi bắt đầu Workflow, đang chờ chạy' }
+          ? { status: 'queued' as const, approvedBy: body.approvedBy, approvedAt: new Date(), progress: body.content ? 'Đã duyệt khi yêu cầu AI viết, đang chờ chạy' : 'Đã duyệt khi bắt đầu Workflow, đang chờ chạy' }
           : {}),
       })
       .returning();
@@ -218,7 +219,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async resume(ctx: Ctx, id: string): Promise<TaskResponse> {
     const row = await this.db.withContext(ctx, async (tx) => {
       await this.control.assertRunning(tx, ctx.tenantId);
-      expectStatus(await this.row(tx, ctx.tenantId, id), ['paused', 'failed']);
+      const current = await this.row(tx, ctx.tenantId, id);
+      expectStatus(current, ['paused', 'failed']);
+      // Its content run has already ended; a new run starts from the item, with the facts as they are now.
+      if (current.contentItemId) {
+        throw new BadRequestException({ code: 'AI_TASK_CONTENT', message: 'Việc AI viết nội dung không chạy lại được. Hãy bấm “AI viết” lại ở Kho thành phẩm.' });
+      }
       const r = await this.setStatus(tx, id, 'queued', { approvedBy: ctx.userId, approvedAt: new Date(), errorCode: null, progress: 'Đang chờ chạy lại' });
       await this.log(tx, ctx, 'ai.task.resumed', id);
       return r;
@@ -444,7 +450,9 @@ export interface TaskOrigin {
   /** Instructions of a workflow AI step, sent as they are without the task frame's self-review. */
   workflow?: { runId: string; nodeId: string; prompt?: string };
   timeoutSec?: number;
-  /** Set by workflows: the task is created approved, by the person who started the run. */
+  /** AI content writing: the prompt MARIS built from verified facts, sent as it is. */
+  content?: { itemId: string; prompt: string };
+  /** Set by workflows and content writing: the task is created approved, by the person who asked. */
   approvedBy?: string;
 }
 
@@ -466,8 +474,12 @@ function assertOwnerOrApprover(task: TaskRow, ctx: Ctx, canApprove: boolean): vo
 
 /** The task, as the AI sees it. The fields are the tenant's own text, framed as the work to do. */
 export function taskPrompt(
-  t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel' | 'skillPrompt'> & Partial<Pick<TaskRow, 'workflowNodeId' | 'skillId'>>,
+  t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel' | 'skillPrompt'> & Partial<Pick<TaskRow, 'workflowNodeId' | 'skillId' | 'contentItemId'>>,
 ): string {
+  // AI content writing: the brief decides the answer's form; the answer is saved as the text itself.
+  if (t.contentItemId && t.skillPrompt) {
+    return ['Quyền hạn: chỉ được soạn nội dung văn bản; không thực hiện, không giả vờ đã thực hiện hành động bên ngoài.', '', t.skillPrompt].join('\n');
+  }
   // A workflow AI step: its own instructions decide the answer's form (a condition may read it).
   if (t.workflowNodeId && !t.skillId && t.skillPrompt) {
     return [

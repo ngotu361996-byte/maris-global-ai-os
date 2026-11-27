@@ -380,6 +380,8 @@ export interface VersionResponse {
   skillName: string | null;
   workflowRunId: string | null;
   aiTaskId: string | null;
+  /** Numbers or claims in an AI-written version that its facts do not support. */
+  aiWarnings: string[];
   note: string | null;
   createdByName: string;
   createdAt: string;
@@ -401,6 +403,8 @@ export interface ItemResponse {
   reviewedAt: string | null;
   publishedUrl: string | null;
   publishedAt: string | null;
+  /** The item this one was made from in another language, market or platform. */
+  variantOf: string | null;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
@@ -410,4 +414,116 @@ export interface ItemDetailResponse extends ItemResponse {
   versions: VersionResponse[];
   /** Why the item cannot be approved now, e.g. a source without usable rights. */
   approvalBlockers: string[];
+  /** AI writing runs for this item, newest first. */
+  generations: GenerationResponse[];
+  /** Items made from this one in other languages, markets or platforms. */
+  variants: {
+    id: string;
+    title: string;
+    language: string;
+    platform: Platform | null;
+    status: ItemStatus;
+  }[];
+}
+
+// ------------------------------------------------------------------------- AI content writing
+
+/**
+ * AI content writing (spec Part 13, M13). The AI writes the next version of an item from verified
+ * product facts and reference sources, as an AI task already approved by the person who asked.
+ * Product facts must be verified first. The result is checked: numbers and advertising claims the
+ * facts do not support become warnings, and an AI version with warnings cannot be approved until a
+ * person edits it into a new version.
+ */
+export const CONTENT_AI_LIMITS = {
+  briefMaxChars: 4000,
+  productsMax: 10,
+  referencesMax: 20,
+  /** Reference text sent to the AI, in total. */
+  referenceChars: 20_000,
+  budgetDefaultUsd: 0.2,
+  budgetMaxUsd: 2,
+  timeoutSec: 300,
+} as const;
+
+/** Suggested tones; any short text is accepted. */
+export const CONTENT_TONES = [
+  'Thân thiện, gần gũi',
+  'Chuyên nghiệp, đáng tin',
+  'Hào hứng, năng động',
+  'Sang trọng, tinh tế',
+  'Ngắn gọn, đi thẳng vào ý',
+] as const;
+
+const language = z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/, 'Mã ngôn ngữ dạng vi, en hoặc en-US');
+const aiRun = {
+  brief: z.string().trim().max(CONTENT_AI_LIMITS.briefMaxChars).nullable().default(null),
+  tone: z.string().trim().max(100).nullable().default(null),
+  budgetUsd: z
+    .number()
+    .positive()
+    .max(CONTENT_AI_LIMITS.budgetMaxUsd)
+    .default(CONTENT_AI_LIMITS.budgetDefaultUsd),
+  agentId: z.uuid().nullable().default(null),
+};
+
+/** Ask the AI to write the next version of an item. */
+export const generateSchema = z.object({
+  /** Verified product facts the text may use. */
+  productAssetIds: z
+    .array(z.uuid())
+    .max(CONTENT_AI_LIMITS.productsMax)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
+  /** Text and reference sources to draw on. */
+  sourceAssetIds: z
+    .array(z.uuid())
+    .max(CONTENT_AI_LIMITS.referencesMax)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
+  ...aiRun,
+});
+export type Generate = z.input<typeof generateSchema>;
+
+/** Make a new item from this one's current text, in another language, market or platform. */
+export const variantSchema = z.object({
+  language,
+  market: z.string().trim().max(50).nullable().default(null),
+  platform: z.enum(PLATFORMS).nullable().default(null),
+  title: z.string().trim().min(1).max(200).nullable().default(null),
+  ...aiRun,
+});
+export type Variant = z.input<typeof variantSchema>;
+
+export const GENERATION_STATUSES = ['running', 'done', 'failed', 'cancelled'] as const;
+export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
+export const GENERATION_STATUS_LABEL: Record<GenerationStatus, string> = {
+  running: 'AI đang viết',
+  done: 'Đã viết xong',
+  failed: 'Lỗi',
+  cancelled: 'Đã hủy',
+};
+
+export interface GenerationResponse {
+  id: string;
+  mode: 'write' | 'variant';
+  status: GenerationStatus;
+  /** What the AI task is doing now, e.g. which AI is writing. */
+  progress: string | null;
+  taskId: string;
+  fromItemId: string | null;
+  fromVersion: number | null;
+  productAssetIds: string[];
+  sourceAssetIds: string[];
+  brief: string | null;
+  tone: string | null;
+  /** The version the result was saved as. */
+  version: number | null;
+  warnings: string[];
+  costUsd: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdByName: string;
+  createdAt: string;
+  finishedAt: string | null;
 }

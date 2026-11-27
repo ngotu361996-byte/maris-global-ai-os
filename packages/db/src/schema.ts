@@ -154,7 +154,9 @@ export const aiProviders = ai.table('providers', {
   id: uuid('id').primaryKey(),
   tenantId: uuid('tenant_id').notNull(),
   name: text('name').notNull(),
-  kind: text('kind').$type<'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openai_compatible'>().notNull(),
+  kind: text('kind')
+    .$type<'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openai_compatible'>()
+    .notNull(),
   baseUrl: text('base_url'),
   secretRef: text('secret_ref'),
   defaultModel: text('default_model').notNull(),
@@ -178,7 +180,10 @@ export const aiConversations = ai.table('conversations', {
   model: text('model'),
   agentId: uuid('agent_id'),
   projectId: uuid('project_id'),
-  mode: text('mode').$type<'chat' | 'research' | 'command' | 'expert' | 'coding' | 'monitor' | 'software'>().notNull().default('chat'),
+  mode: text('mode')
+    .$type<'chat' | 'research' | 'command' | 'expert' | 'coding' | 'monitor' | 'software'>()
+    .notNull()
+    .default('chat'),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   deletedAt: ts('deleted_at'),
@@ -191,7 +196,10 @@ export const aiMessages = ai.table('messages', {
   conversationId: uuid('conversation_id').notNull(),
   role: text('role').$type<'user' | 'assistant'>().notNull(),
   content: text('content').notNull().default(''),
-  status: text('status').$type<'streaming' | 'complete' | 'error' | 'cancelled'>().notNull().default('complete'),
+  status: text('status')
+    .$type<'streaming' | 'complete' | 'error' | 'cancelled'>()
+    .notNull()
+    .default('complete'),
   providerId: uuid('provider_id'),
   model: text('model'),
   inputTokens: integer('input_tokens'),
@@ -208,7 +216,9 @@ export const aiProviderCalls = ai.table('provider_calls', {
   messageId: uuid('message_id'),
   providerId: uuid('provider_id').notNull(),
   model: text('model').notNull(),
-  outcome: text('outcome').$type<'ok' | 'error' | 'timeout' | 'circuit_open' | 'cancelled'>().notNull(),
+  outcome: text('outcome')
+    .$type<'ok' | 'error' | 'timeout' | 'circuit_open' | 'cancelled'>()
+    .notNull(),
   errorCode: text('error_code'),
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),
@@ -220,7 +230,8 @@ export const aiProviderCalls = ai.table('provider_calls', {
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 
-export type AiAccessLevel = 'read' | 'analyze' | 'plan' | 'prepare' | 'execute' | 'control' | 'develop' | 'deploy';
+export type AiAccessLevel =
+  'read' | 'analyze' | 'plan' | 'prepare' | 'execute' | 'control' | 'develop' | 'deploy';
 
 export const aiAgents = ai.table('agents', {
   id: uuid('id').primaryKey(),
@@ -276,7 +287,8 @@ export const aiMemories = ai.table('memories', {
   deletedAt: ts('deleted_at'),
 });
 
-export type AiTaskStatus = 'pending' | 'rejected' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type AiTaskStatus =
+  'pending' | 'rejected' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 export const aiTasks = ai.table('tasks', {
   id: uuid('id').primaryKey(),
@@ -300,6 +312,7 @@ export const aiTasks = ai.table('tasks', {
   timeoutSec: integer('timeout_sec'),
   workflowRunId: uuid('workflow_run_id'),
   workflowNodeId: text('workflow_node_id'),
+  contentItemId: uuid('content_item_id'),
   status: text('status').$type<AiTaskStatus>().notNull().default('pending'),
   progress: text('progress'),
   approvedBy: uuid('approved_by'),
@@ -494,9 +507,13 @@ export const aiSkills = ai.table('skills', {
 /** The workflow graph as stored; its shape is validated by the API (contracts `workflowGraphSchema`). */
 export interface WorkGraphData {
   maxSteps: number;
-  nodes: ({ id: string; type: string; label: string; next?: string | null } & Record<string, unknown>)[];
+  nodes: ({ id: string; type: string; label: string; next?: string | null } & Record<
+    string,
+    unknown
+  >)[];
 }
-export type WorkflowRunStatus = 'running' | 'waiting_approval' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type WorkflowRunStatus =
+  'running' | 'waiting_approval' | 'paused' | 'completed' | 'failed' | 'cancelled';
 export type WorkflowWait =
   | { kind: 'task'; taskId: string }
   | { kind: 'approval' }
@@ -540,7 +557,10 @@ export const workflowRuns = work.table('workflow_runs', {
   outputs: jsonb('outputs').$type<Record<string, string>>().notNull().default({}),
   currentNode: text('current_node'),
   wait: jsonb('wait').$type<WorkflowWait | null>(),
-  checkpoint: jsonb('checkpoint').$type<{ nodeId: string | null; outputs: Record<string, string> } | null>(),
+  checkpoint: jsonb('checkpoint').$type<{
+    nodeId: string | null;
+    outputs: Record<string, string>;
+  } | null>(),
   stepsTaken: integer('steps_taken').notNull().default(0),
   budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).notNull(),
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
@@ -560,7 +580,9 @@ export const workflowRunSteps = work.table('workflow_run_steps', {
   nodeId: text('node_id').notNull(),
   nodeType: text('node_type').notNull(),
   label: text('label').notNull(),
-  status: text('status').$type<'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'>().notNull(),
+  status: text('status')
+    .$type<'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'>()
+    .notNull(),
   input: text('input'),
   output: text('output'),
   taskId: uuid('task_id'),
@@ -746,7 +768,10 @@ export const devices = infra.table('devices', {
   tenantId: uuid('tenant_id').notNull(),
   name: text('name').notNull(),
   kind: text('kind').$type<DeviceKind>().notNull(),
-  status: text('status').$type<'pending' | 'active' | 'paused' | 'revoked'>().notNull().default('pending'),
+  status: text('status')
+    .$type<'pending' | 'active' | 'paused' | 'revoked'>()
+    .notNull()
+    .default('pending'),
   pairingHash: text('pairing_hash'),
   pairingExpiresAt: ts('pairing_expires_at'),
   tokenHash: text('token_hash'),
@@ -919,6 +944,7 @@ export const contentItems = content.table('items', {
   reviewedAt: ts('reviewed_at'),
   publishedUrl: text('published_url'),
   publishedAt: ts('published_at'),
+  variantOf: uuid('variant_of'),
   createdBy: uuid('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
@@ -943,4 +969,29 @@ export const contentItemVersions = content.table('item_versions', {
   note: text('note'),
   createdBy: uuid('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export type ContentGenerationStatus = 'running' | 'done' | 'failed' | 'cancelled';
+
+export const contentGenerations = content.table('generations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  taskId: uuid('task_id').notNull(),
+  mode: text('mode').$type<'write' | 'variant'>().notNull(),
+  fromItemId: uuid('from_item_id'),
+  fromVersion: integer('from_version'),
+  productAssetIds: uuid('product_asset_ids').array().notNull().default([]),
+  sourceAssetIds: uuid('source_asset_ids').array().notNull().default([]),
+  brief: text('brief'),
+  tone: text('tone'),
+  allowedText: text('allowed_text').notNull().default(''),
+  status: text('status').$type<ContentGenerationStatus>().notNull().default('running'),
+  version: integer('version'),
+  warnings: text('warnings').array().notNull().default([]),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
 });
