@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Param,
   ParseIntPipe,
@@ -34,6 +35,12 @@ import {
   generateSchema,
   variantSchema,
   CONTENT_LIBRARIES,
+  IMAGE_PRESETS,
+  processImageSchema,
+  type MediaJobResponse,
+  type MediaJobsResponse,
+  type MediaOutputResponse,
+  type ProcessImage,
   type Generate,
   type Variant,
   type AssetResponse,
@@ -59,8 +66,10 @@ import {
   type TenantContext,
 } from '../common/request-context';
 import { ZodPipe } from '../common/zod.pipe';
+import { RateLimit } from '../ratelimit/rate-limit.guard';
 import { RequirePermission, TenantGuard } from '../tenancy/tenant.guard';
 import { ContentAiService } from './content-ai.service';
+import { ContentMediaService } from './content-media.service';
 import { ContentService } from './content.service';
 
 const ctxOf = (user: AuthUser, tenant: TenantContext, req: Request): Ctx => ({
@@ -117,6 +126,7 @@ export class ContentController {
   constructor(
     private readonly content: ContentService,
     private readonly ai: ContentAiService,
+    private readonly media: ContentMediaService,
   ) {}
 
   // ---------------------------------------------------------------- folders
@@ -476,5 +486,76 @@ export class ContentController {
     @Req() req: Request,
   ): Promise<ItemDetailResponse> {
     return this.ai.cancel(ctxOf(user, tenant, req), id, tenant.permissions.has('ai.approve'));
+  }
+
+  // ---------------------------------------------------------------- image processing
+
+  @Post('assets/:id/process-image')
+  @HttpCode(202)
+  @RequirePermission('content.manage')
+  processImage(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(processImageSchema)) body: ProcessImage,
+    @Req() req: Request,
+  ): Promise<MediaJobResponse> {
+    return this.media.processImage(ctxOf(user, tenant, req), id, body);
+  }
+
+  @Get('assets/:id/media-jobs')
+  @RequirePermission('content.read')
+  mediaJobs(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<MediaJobsResponse> {
+    return this.media.list(ctxOf(user, tenant, req), id);
+  }
+
+  @Post('media-jobs/:id/cancel')
+  @HttpCode(200)
+  @RequirePermission('content.manage')
+  cancelMediaJob(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<MediaJobResponse> {
+    return this.media.cancel(ctxOf(user, tenant, req), id);
+  }
+}
+
+const outputQuery = z.object({ preset: z.enum(IMAGE_PRESETS) });
+
+/**
+ * Files of a media job, for the worker running it (device key in X-Maris-Device, no session).
+ * The worker calls in; it can read only the image and logo of a job it runs now.
+ */
+@Controller('agent/jobs')
+export class ContentAgentController {
+  constructor(private readonly media: ContentMediaService) {}
+
+  @Get(':id/files/:assetId')
+  @RateLimit({ name: 'agent-file', limit: 120, windowSec: 60, by: 'ip' })
+  async file(
+    @Headers('x-maris-device') key: string | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('assetId', new ParseUUIDPipe()) assetId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    sendFile(res, await this.media.agentFile(key, id, assetId), false);
+  }
+
+  @Post(':id/outputs')
+  @RateLimit({ name: 'agent-output', limit: 120, windowSec: 60, by: 'ip' })
+  output(
+    @Headers('x-maris-device') key: string | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodPipe(outputQuery)) q: z.infer<typeof outputQuery>,
+    @Req() req: Request,
+  ): Promise<MediaOutputResponse> {
+    return this.media.agentOutput(key, id, q.preset, uploadName(req), req);
   }
 }

@@ -559,6 +559,37 @@ export class ContentService {
     );
   }
 
+  /** Adds a file version inside the caller's transaction (used by the Media Worker outputs). */
+  addFileVersionIn(
+    tx: Tx,
+    ctx: Ctx,
+    item: ItemRow,
+    file: StoredFile,
+    lineage: { sourceAssetIds: string[]; workerJobId: string; note: string },
+  ): Promise<ItemRow> {
+    return this.addVersion(
+      tx,
+      ctx,
+      item,
+      { file },
+      { ...lineage, skillId: null, workflowRunId: null, aiTaskId: null },
+    );
+  }
+
+  /** Streams a file to staging and detects its type; the caller commits or discards it. */
+  receiveFile(ctx: Ctx, rawName: string, body: Readable): Promise<StoredFile> {
+    return this.receive(ctx, rawName, body);
+  }
+
+  assetIn(tx: Tx, ctx: Ctx, id: string): Promise<AssetRow> {
+    return this.asset(tx, ctx, id);
+  }
+
+  /** The folder, or an error when it is not a folder of that library. */
+  folderIn(tx: Tx, ctx: Ctx, id: string, library: ContentLibrary) {
+    return this.folder(tx, ctx, id, library);
+  }
+
   /** Reads (and with lock, locks) an item of the caller's tenant. */
   itemIn(tx: Tx, ctx: Ctx, id: string, lock = false): Promise<ItemRow> {
     return this.item(tx, ctx, id, lock);
@@ -771,6 +802,7 @@ export class ContentService {
       workflowRunId: string | null;
       aiTaskId: string | null;
       note: string | null;
+      workerJobId?: string | null;
     },
   ): Promise<ItemRow> {
     editable(item);
@@ -845,6 +877,7 @@ export class ContentService {
       skillVersion,
       workflowRunId: lineage.workflowRunId,
       aiTaskId: lineage.aiTaskId,
+      workerJobId: lineage.workerJobId ?? null,
       note: lineage.note,
       createdBy: ctx.userId,
     });
@@ -868,6 +901,7 @@ export class ContentService {
       ...(lineage.skillId ? { skillId: lineage.skillId, skillVersion } : {}),
       ...(lineage.workflowRunId ? { workflowRunId: lineage.workflowRunId } : {}),
       ...(lineage.aiTaskId ? { aiTaskId: lineage.aiTaskId } : {}),
+      ...(lineage.workerJobId ? { workerJobId: lineage.workerJobId } : {}),
     });
     return row!;
   }
@@ -1266,6 +1300,7 @@ function versionResponse(
     workflowRunId: v.workflowRunId,
     aiTaskId: v.aiTaskId,
     aiWarnings,
+    workerJobId: v.workerJobId,
     note: v.note,
     createdByName: names.get(v.createdBy) ?? '',
     createdAt: v.createdAt.toISOString(),

@@ -12,8 +12,19 @@ export const WORKER_JOB_KINDS = [
   'ollama.generate',
   'test.wait',
   'code.run',
+  'media.image',
 ] as const;
 export type WorkerJobKind = (typeof WORKER_JOB_KINDS)[number];
+/**
+ * Kinds that only MARIS itself queues, from a screen that checks what they work on (e.g. an image
+ * job from the content library, which checks the image's rights). They cannot be queued or retried
+ * from the jobs screen.
+ */
+export const INTERNAL_JOB_KINDS = ['media.image'] as const satisfies readonly WorkerJobKind[];
+export const isInternalJobKind = (k: string) =>
+  (INTERNAL_JOB_KINDS as readonly string[]).includes(k);
+/** Kinds a person can queue on the jobs screen. */
+export const MANUAL_JOB_KINDS = WORKER_JOB_KINDS.filter((k) => !isInternalJobKind(k));
 
 export const WORKER_JOB_KIND_INFO: Record<
   WorkerJobKind,
@@ -40,7 +51,74 @@ export const WORKER_JOB_KIND_INFO: Record<
       'Chạy mã Python hoặc Node.js trong container Docker cách ly: không mạng, không ghi đĩa, giới hạn RAM, CPU và thời gian',
     timeoutSec: 120,
   },
+  'media.image': {
+    label: 'Xử lý ảnh',
+    description:
+      'Chuẩn hóa kích thước, đổi tỉ lệ khung hình, tạo thumbnail và gắn logo cho ảnh trong kho nội dung',
+    timeoutSec: 600,
+  },
 };
+
+// ------------------------------------------------------------------------- media.image
+
+/** Output sizes for the platforms (spec Part 13: chuẩn hóa kích thước, thumbnail, tỉ lệ khung hình). */
+export const IMAGE_PRESETS = [
+  'feed_square',
+  'feed_portrait',
+  'story',
+  'landscape',
+  'thumbnail',
+  'original',
+] as const;
+export type ImagePreset = (typeof IMAGE_PRESETS)[number];
+export const IMAGE_PRESET_INFO: Record<
+  ImagePreset,
+  { label: string; hint: string; width: number | null; height: number | null }
+> = {
+  feed_square: {
+    label: 'Vuông 1:1',
+    hint: 'Bài đăng Facebook, Instagram',
+    width: 1080,
+    height: 1080,
+  },
+  feed_portrait: {
+    label: 'Dọc 4:5',
+    hint: 'Bài đăng Instagram, Facebook',
+    width: 1080,
+    height: 1350,
+  },
+  story: { label: 'Dọc 9:16', hint: 'Story, Reels, TikTok', width: 1080, height: 1920 },
+  landscape: { label: 'Ngang 16:9', hint: 'Banner, website, Facebook', width: 1920, height: 1080 },
+  thumbnail: { label: 'Thumbnail', hint: 'Ảnh bìa YouTube 1280×720', width: 1280, height: 720 },
+  original: { label: 'Giữ cỡ gốc', hint: 'Chỉ gắn logo hoặc chỉnh ảnh', width: null, height: null },
+};
+export const IMAGE_FITS = ['cover', 'contain'] as const;
+export const IMAGE_FIT_LABEL: Record<(typeof IMAGE_FITS)[number], string> = {
+  cover: 'Cắt cho vừa khung (giữ phần chính của ảnh)',
+  contain: 'Giữ trọn ảnh, thêm nền vào chỗ trống',
+};
+export const LOGO_POSITIONS = [
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+  'center',
+] as const;
+export const LOGO_POSITION_LABEL: Record<(typeof LOGO_POSITIONS)[number], string> = {
+  'top-left': 'Góc trên trái',
+  'top-right': 'Góc trên phải',
+  'bottom-left': 'Góc dưới trái',
+  'bottom-right': 'Góc dưới phải',
+  center: 'Giữa ảnh',
+};
+export const IMAGE_FORMATS = ['jpeg', 'webp', 'png'] as const;
+export type ImageFormat = (typeof IMAGE_FORMATS)[number];
+export const MEDIA_LIMITS = {
+  /** Largest source image or logo, in MB. */
+  imageMaxMb: 50,
+  /** Largest source image, in pixels (about 100 megapixels), so a crafted file cannot exhaust RAM. */
+  maxInputPixels: 100_000_000,
+} as const;
 
 /** Device kinds that may run code.run; the server adds this target to every code job. */
 export const CODE_RUNNER_KINDS = ['code_runner'] as const satisfies readonly DeviceKind[];
@@ -108,6 +186,39 @@ export const workerJobInputSchemas = {
       language: z.enum(CODE_LANGUAGES),
       code: z.string().min(1).max(SANDBOX_LIMITS.codeMaxChars),
       stdin: z.string().max(SANDBOX_LIMITS.stdinMaxChars).default(''),
+    })
+    .strict(),
+  'media.image': z
+    .object({
+      assetId: z.uuid(),
+      logoAssetId: z.uuid().nullable().default(null),
+      /** Output folder for the new items. */
+      folderId: z.uuid().nullable().default(null),
+      presets: z
+        .array(z.enum(IMAGE_PRESETS))
+        .min(1, 'Chọn ít nhất một cỡ ảnh')
+        .max(IMAGE_PRESETS.length)
+        .transform((p) => [...new Set(p)]),
+      fit: z.enum(IMAGE_FITS).default('cover'),
+      background: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/, 'Màu nền dạng #RRGGBB')
+        .default('#ffffff'),
+      logo: z
+        .object({
+          position: z.enum(LOGO_POSITIONS).default('bottom-right'),
+          /** Logo width as a share of the image width. */
+          sizePct: z.number().int().min(5).max(40).default(15),
+          opacity: z.number().min(0.1).max(1).default(1),
+          marginPct: z.number().int().min(0).max(10).default(3),
+        })
+        .strict()
+        .default({ position: 'bottom-right', sizePct: 15, opacity: 1, marginPct: 3 }),
+      /** Stretch the levels of a dull image (cân chỉnh ánh sáng). */
+      autoLevel: z.boolean().default(false),
+      sharpen: z.boolean().default(false),
+      format: z.enum(IMAGE_FORMATS).default('jpeg'),
+      quality: z.number().int().min(50).max(100).default(85),
     })
     .strict(),
 } satisfies Record<WorkerJobKind, z.ZodType>;
@@ -213,6 +324,22 @@ export interface CodeRunResult {
   stderr: string;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
+}
+
+/** One finished image of a media.image job, as the worker reports it. */
+export interface MediaOutput {
+  preset: ImagePreset;
+  itemId: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+}
+
+/** The answer to a worker that sends one output image. */
+export interface MediaOutputResponse {
+  itemId: string;
+  /** This preset was already saved for the job (a resend); nothing new was made. */
+  duplicate: boolean;
 }
 
 export interface WorkerJobLogResponse {

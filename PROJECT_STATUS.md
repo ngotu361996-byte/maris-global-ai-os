@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 17)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 18)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -9,7 +9,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6. Content Factory | Sprint 16 (kho nội dung) đã merge; Sprint 17 (AI viết nội dung) đang review; kế tiếp: 18 xử lý ảnh, 19 xử lý video, 20 kiểm định và nghiệm thu |
+| 6. Content Factory | Sprint 16 (kho nội dung) và 17 (AI viết nội dung) đã merge; Sprint 18 (xử lý ảnh) đang review; kế tiếp: 19 xử lý video, 20 kiểm định và nghiệm thu |
 | 7–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -131,7 +131,19 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 17 – AI viết nội dung (Giai đoạn 6)
+## Sprint 18 – Xử lý ảnh trên Media Worker (Giai đoạn 6)
+
+- Migration `0018`: bảng `content.media_outputs` (RLS, mỗi việc và mỗi cỡ ảnh một kết quả); cột `content.item_versions.worker_job_id`
+- Loại việc Worker mới `media.image` (đặc tả Phần 13 và 26): chuẩn hóa kích thước theo nền tảng (vuông 1:1, dọc 4:5, dọc 9:16 cho Story/Reels/TikTok, ngang 16:9, thumbnail YouTube 1280×720, giữ cỡ gốc), cắt theo phần chính của ảnh hoặc giữ trọn ảnh trên nền màu, gắn logo (vị trí, cỡ, độ đậm, cách mép), cân chỉnh ánh sáng nhẹ, tăng độ nét, xuất JPEG/WebP/PNG
+- `POST /api/v1/content/assets/:id/process-image` (`content.manage`): chỉ cho ảnh đã tải lên, không lưu trữ, không bị đánh dấu “Không được dùng”, tối đa 50 MB; logo cũng vậy. `GET .../media-jobs` (danh sách việc và các Worker xử lý được), `POST /content/media-jobs/:id/cancel`
+- Việc `media.image` chỉ tạo được từ kho nội dung (tạo hoặc chạy lại ở màn hình Việc của Worker bị từ chối `JOB_KIND_INTERNAL`)
+- Worker chỉ tải được đúng ảnh và logo của việc mình đang chạy (`GET /agent/jobs/:id/files/:assetId`) và gửi kết quả (`POST /agent/jobs/:id/outputs?preset=`). Máy chủ nhận dạng lại tệp, chỉ nhận ảnh; gửi lại cùng cỡ trả về thành phẩm đã tạo
+- Mỗi cỡ ảnh thành một thành phẩm loại Hình ảnh (bản nháp) có phiên bản 1 ghi nguồn gốc (ảnh gốc, logo), việc Worker và máy làm; duyệt như mọi thành phẩm
+- MARIS Worker 0.18: dùng thư viện `sharp`, tự báo nhận việc xử lý ảnh khi thư viện chạy được; xoay ảnh theo EXIF, bỏ thông tin vị trí và metadata, từ chối SVG; giới hạn 100 megapixel
+- Web: Kho nội dung gốc, chọn một ảnh, phần “Xử lý ảnh” (cỡ ảnh, logo, chỉnh ảnh, định dạng, thư mục, máy xử lý, danh sách việc và liên kết tới thành phẩm). Phiên bản ghi “do Media Worker xử lý”
+- Giới hạn: chưa tách nền, thay nền, dịch chữ trên ảnh (cần AI hình ảnh); chưa xử lý hàng loạt nhiều ảnh một lần
+
+## Sprint 17 – AI viết nội dung (Giai đoạn 6, đã merge)
 
 - Migration `0017`: quyền `content.generate` (chủ, quản trị, quản lý); bảng `content.generations` (RLS); cột `content.items.variant_of` và `ai.tasks.content_item_id`
 - AI viết phiên bản mới cho một thành phẩm (M13, đặc tả Phần 13): `POST /api/v1/content/items/:id/generate` với thông tin sản phẩm, văn bản tham khảo, yêu cầu thêm, giọng văn và ngân sách (mặc định 0,2 USD, tối đa 2 USD)

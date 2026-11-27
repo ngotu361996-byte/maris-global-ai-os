@@ -9,6 +9,7 @@ import { and, asc, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-
 import { schema, uuidv7 } from '@maris/db';
 import {
   CODE_RUNNER_KINDS,
+  isInternalJobKind,
   JOB_LEASE_SEC,
   JOB_POLL_SEC,
   JOB_RESULT_MAX_BYTES,
@@ -33,20 +34,30 @@ import { DbService, type Tx } from '../db/db.service';
 import { DevicesService, type DeviceRow } from './devices.service';
 
 const { devices, deviceMetrics, deviceEvents, workerJobs, workerJobLogs } = schema;
-type JobRow = typeof workerJobs.$inferSelect;
+export type JobRow = typeof workerJobs.$inferSelect;
 type LogLevel = 'info' | 'warning' | 'error';
 
 /** A device that lost a job may take it back after it has waited this long for another worker. */
 const EXCLUDE_SEC = 60;
 
-/** May this person queue code.run jobs (the infra.code permission)? */
 export interface JobCreateOptions {
+  /** May this person queue code.run jobs (the infra.code permission)? */
   canRunCode: boolean;
+  /** Queued by MARIS itself after its own checks (e.g. image jobs from the content library). */
+  internal?: boolean;
 }
+
+/** A job a device is running now, as seen by that device. */
+export type RunningJob = { job: JobRow; device: DeviceRow };
 
 const isCodeRunner = (kind: string) => (CODE_RUNNER_KINDS as readonly string[]).includes(kind);
 
 const badState = (message: string) => new BadRequestException({ code: 'JOB_STATE', message });
+const notYours = () =>
+  new ForbiddenException({
+    code: 'JOB_NOT_RUNNING_HERE',
+    message: 'Việc này không còn chạy trên máy này (đã xong, bị hủy hoặc chuyển sang máy khác)',
+  });
 
 /**
  * Jobs for workers (spec Part 26). People queue jobs; workers ask for one when they have room
@@ -111,7 +122,22 @@ export class WorkerJobsService {
   }
 
   create(ctx: Ctx, raw: CreateWorkerJob, opts: JobCreateOptions): Promise<WorkerJobResponse> {
+    return this.db.withContext(ctx, (tx) => this.createIn(tx, ctx, raw, opts));
+  }
+
+  /** Queues a job inside the caller's transaction. */
+  async createIn(
+    tx: Tx,
+    ctx: Ctx,
+    raw: CreateWorkerJob,
+    opts: JobCreateOptions,
+  ): Promise<WorkerJobResponse> {
     const body = createWorkerJobSchema.parse(raw);
+    if (isInternalJobKind(body.kind) && !opts.internal)
+      throw new BadRequestException({
+        code: 'JOB_KIND_INTERNAL',
+        message: `Việc “${WORKER_JOB_KIND_INFO[body.kind].label}” chỉ tạo được từ màn hình của nó (ví dụ xử lý ảnh từ kho nội dung), vì ở đó MARIS kiểm tra quyền sử dụng tệp`,
+      });
     const parsed = workerJobInputSchemas[body.kind].safeParse(body.input);
     if (!parsed.success)
       throw new BadRequestException({
@@ -140,7 +166,7 @@ export class WorkerJobsService {
         codeChars: input.code.length,
       };
     }
-    return this.db.withContext(ctx, async (tx) => {
+    {
       if (body.targetDeviceId) {
         const [d] = await tx
           .select()
@@ -190,7 +216,7 @@ export class WorkerJobsService {
         ...codeMeta,
       });
       return respond(row!, new Map());
-    });
+    }
   }
 
   /** A waiting job stops at once; a running one is told to stop at its next report. */
@@ -439,6 +465,54 @@ export class WorkerJobsService {
       }
       return { accepted: true };
     });
+  }
+
+  /**
+   * For a worker that fetches or sends files of a job: the job, while this device is running it.
+   * Throws when it is not (finished, cancelled, moved to another worker, or never its own).
+   */
+  runningJob(deviceKey: string | undefined, id: string): Promise<RunningJob> {
+    return this.devices.withDevice(deviceKey, async (tx, d) => {
+      const job = await this.mine(tx, d, id);
+      if (!job || job.cancelRequested) throw notYours();
+      return { job, device: d };
+    });
+  }
+
+  /** Locks the job again inside another transaction, checking it is still this device's. */
+  async lockRunningIn(tx: Tx, device: DeviceRow, id: string): Promise<JobRow> {
+    const job = await this.mine(tx, device, id);
+    if (!job || job.cancelRequested) throw notYours();
+    return job;
+  }
+
+  /** Jobs of one kind whose input field equals a value, newest first. */
+  async findByInput(
+    tx: Tx,
+    ctx: Ctx,
+    kind: WorkerJobKind,
+    field: string,
+    value: string,
+    limit: number,
+  ) {
+    await sweep(tx, ctx.tenantId);
+    const rows = await tx
+      .select()
+      .from(workerJobs)
+      .where(
+        and(
+          eq(workerJobs.tenantId, ctx.tenantId),
+          eq(workerJobs.kind, kind),
+          sql`${workerJobs.input} ->> ${field} = ${value}`,
+        ),
+      )
+      .orderBy(desc(workerJobs.createdAt))
+      .limit(limit);
+    const names = await deviceNames(
+      tx,
+      rows.map((r) => r.deviceId),
+    );
+    return rows.map((r) => ({ row: r, response: respond(r, names) }));
   }
 
   // ---------------------------------------------------------------------------------------------

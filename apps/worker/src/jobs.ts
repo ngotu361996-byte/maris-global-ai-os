@@ -2,12 +2,24 @@ import { execFile } from 'node:child_process';
 import { statfs } from 'node:fs/promises';
 import os from 'node:os';
 import {
+  IMAGE_PRESET_INFO,
   JOB_POLL_SEC,
+  MEDIA_LIMITS,
   workerJobInputSchemas,
+  type ImagePreset,
+  type MediaOutput,
   type AgentJob,
   type WorkerJobKind,
 } from '@maris/contracts';
-import { claimJob, finishJob, jobProgress, ServerError } from './client';
+import {
+  claimJob,
+  downloadJobFile,
+  finishJob,
+  jobProgress,
+  ServerError,
+  uploadJobOutput,
+} from './client';
+import { loadSharp, renderImage } from './image';
 import { AGENT_VERSION, parseNvidiaSmi } from './metrics';
 import { dockerAvailable, runSandbox } from './sandbox';
 
@@ -26,6 +38,10 @@ export interface JobContext {
   server: string;
   /** The job's time limit; the job is stopped when it runs out. */
   timeoutSec: number;
+  /** Fetches a library file of this job (only its own image and logo are allowed). */
+  download(assetId: string, maxBytes: number): Promise<Buffer>;
+  /** Sends one output image of this job. */
+  upload(preset: ImagePreset, fileName: string, data: Buffer): Promise<{ itemId: string }>;
 }
 
 export class JobError extends Error {
@@ -200,6 +216,67 @@ export const HANDLERS: Record<WorkerJobKind, Handler> = {
     ctx.report(100, `Mã thoát ${out.exitCode}`);
     return result;
   },
+
+  async 'media.image'(raw, ctx) {
+    const input = workerJobInputSchemas['media.image'].parse(raw);
+    const sharp = await loadSharp();
+    if (!sharp)
+      throw new JobError('MEDIA_UNAVAILABLE', 'Máy này chưa có thư viện xử lý ảnh (sharp)');
+    const maxBytes = MEDIA_LIMITS.imageMaxMb * 1024 * 1024;
+    const fetchFile = async (id: string, what: string) => {
+      try {
+        return await ctx.download(id, maxBytes);
+      } catch (e) {
+        if (ctx.signal.aborted) throw new JobError('CANCELLED', 'Đã dừng');
+        throw new JobError(
+          'MEDIA_DOWNLOAD_FAILED',
+          `Không tải được ${what}: ${(e as Error).message}`,
+        );
+      }
+    };
+    ctx.report(5, 'Tải ảnh gốc');
+    const source = await fetchFile(input.assetId, 'ảnh gốc');
+    const logo = input.logoAssetId ? await fetchFile(input.logoAssetId, 'logo') : null;
+    const outputs: MediaOutput[] = [];
+    for (const [i, preset] of input.presets.entries()) {
+      if (ctx.signal.aborted) throw new JobError('CANCELLED', 'Đã dừng');
+      const label = IMAGE_PRESET_INFO[preset].label;
+      ctx.report(10 + Math.round((i / input.presets.length) * 85), `Đang làm ảnh ${label}`);
+      let img;
+      try {
+        img = await renderImage(sharp, source, logo, preset, input);
+      } catch (e) {
+        throw new JobError('MEDIA_IMAGE_INVALID', `Không xử lý được ảnh: ${(e as Error).message}`);
+      }
+      let saved: { itemId: string };
+      try {
+        saved = await ctx.upload(
+          preset,
+          `${preset}-${img.width}x${img.height}.${img.ext}`,
+          img.data,
+        );
+      } catch (e) {
+        if (ctx.signal.aborted) throw new JobError('CANCELLED', 'Đã dừng');
+        throw new JobError(
+          'MEDIA_UPLOAD_FAILED',
+          `Không gửi được ảnh ${label}: ${(e as Error).message}`,
+        );
+      }
+      outputs.push({
+        preset,
+        itemId: saved.itemId,
+        width: img.width,
+        height: img.height,
+        sizeBytes: img.data.length,
+      });
+      ctx.report(
+        10 + Math.round(((i + 1) / input.presets.length) * 85),
+        `Xong ${i + 1}/${input.presets.length}`,
+        `Đã gửi ảnh ${label} ${img.width}×${img.height} (${Math.round(img.data.length / 1024)} KB)`,
+      );
+    }
+    return { outputs };
+  },
 };
 
 /** Models installed in Ollama on this machine, or null when Ollama is not running. */
@@ -223,6 +300,7 @@ export async function capabilities(opts: { allowCode: boolean }): Promise<Worker
   const models = await ollamaModels();
   if (models && models.length > 0) kinds.push('ollama.generate');
   if (opts.allowCode && (await dockerAvailable())) kinds.push('code.run');
+  if (await loadSharp()) kinds.push('media.image');
   return kinds;
 }
 
@@ -309,6 +387,18 @@ export class JobRunner {
         signal: controller.signal,
         server: this.server,
         timeoutSec: job.timeoutSec,
+        download: (assetId, maxBytes) =>
+          downloadJobFile(this.server, this.token, job.id, assetId, maxBytes, controller.signal),
+        upload: (preset, fileName, data) =>
+          uploadJobOutput(
+            this.server,
+            this.token,
+            job.id,
+            preset,
+            fileName,
+            data,
+            controller.signal,
+          ),
         report: (p, n, line) => {
           if (p !== undefined) progress = p;
           if (n !== undefined) note = n;

@@ -77,6 +77,7 @@ function Version({ itemId, v, current }: { itemId: string; v: VersionResponse; c
         {v.skillName && <span>· Skill: {v.skillName}</span>}
         {v.workflowRunId && <span>· từ Workflow</span>}
         {v.aiTaskId && <span>· do AI viết</span>}
+        {v.workerJobId && <span>· do Media Worker xử lý</span>}
       </div>
       {v.note && <p className="mb-2 text-xs italic text-muted">{v.note}</p>}
       {v.aiWarnings.map((w) => (
@@ -145,7 +146,8 @@ function ItemsPage() {
   const [sources, setSources] = useState<string[]>(from ? [from] : []);
   // Sources chosen for an item created without text; they go on its first uploaded version.
   const [pendingSources, setPendingSources] = useState<Record<string, string[]>>({});
-  const [selected, setSelected] = useState<string | null>(null);
+  // ?open=<id> opens an item, e.g. an image made by the Media Worker.
+  const [selected, setSelected] = useState<string | null>(params.get('open'));
   const [detail, setDetail] = useState<ItemDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);

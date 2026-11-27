@@ -3,6 +3,7 @@ import type {
   FinishJob,
   JobProgress,
   JobProgressResponse,
+  MediaOutputResponse,
   DeviceInfo,
   Heartbeat,
   HeartbeatResponse,
@@ -17,6 +18,21 @@ export class ServerError extends Error {
   ) {
     super(message);
   }
+}
+
+async function fail(res: Response): Promise<never> {
+  const text = await res.text().catch(() => '');
+  let err: { code?: string; message?: string } | undefined;
+  try {
+    err = (JSON.parse(text) as { error?: { code?: string; message?: string } }).error;
+  } catch {
+    /* not JSON */
+  }
+  throw new ServerError(
+    res.status,
+    err?.code ?? 'HTTP_ERROR',
+    err?.message ?? `HTTP ${res.status}`,
+  );
 }
 
 async function post<T>(
@@ -84,4 +100,57 @@ export function finishJob(
   body: FinishJob,
 ): Promise<{ accepted: boolean }> {
   return post(`${server}/agent/jobs/${id}/finish`, body, { 'X-Maris-Device': token });
+}
+
+/** Fetches an image (or logo) of a job this worker runs, refusing anything over maxBytes. */
+export async function downloadJobFile(
+  server: string,
+  token: string,
+  jobId: string,
+  assetId: string,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Buffer> {
+  const res = await fetch(`${server}/agent/jobs/${jobId}/files/${assetId}`, {
+    headers: { 'X-Maris-Device': token },
+    signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
+  });
+  if (!res.ok) return fail(res);
+  if (Number(res.headers.get('content-length') ?? 0) > maxBytes)
+    throw new ServerError(413, 'FILE_TOO_LARGE', 'Tệp quá lớn');
+  const parts: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    size += chunk.length;
+    if (size > maxBytes) throw new ServerError(413, 'FILE_TOO_LARGE', 'Tệp quá lớn');
+    parts.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(parts);
+}
+
+/** Sends one output image of a job; sending the same preset again is safe. */
+export async function uploadJobOutput(
+  server: string,
+  token: string,
+  jobId: string,
+  preset: string,
+  fileName: string,
+  data: Buffer,
+  signal: AbortSignal,
+): Promise<MediaOutputResponse> {
+  const res = await fetch(
+    `${server}/agent/jobs/${jobId}/outputs?preset=${encodeURIComponent(preset)}`,
+    {
+      method: 'POST',
+      headers: {
+        'X-Maris-Device': token,
+        'Content-Type': 'application/octet-stream',
+        'X-File-Name': encodeURIComponent(fileName),
+      },
+      body: new Uint8Array(data),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
+    },
+  );
+  if (!res.ok) return fail(res);
+  return (await res.json()) as MediaOutputResponse;
 }

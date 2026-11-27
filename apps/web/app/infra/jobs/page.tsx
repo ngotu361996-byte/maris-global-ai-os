@@ -7,7 +7,7 @@ import {
   DEVICE_KIND_LABEL,
   SANDBOX_LIMITS,
   WORKER_JOB_KIND_INFO,
-  WORKER_JOB_KINDS,
+  MANUAL_JOB_KINDS,
   WORKER_JOB_STATUS_LABEL,
   type CodeRunResult,
   type DeviceResponse,
@@ -257,7 +257,7 @@ export default function WorkerJobsPage() {
                 onChange={(e) => setKind(e.target.value as WorkerJobKind)}
                 className={`${inputCls} mt-1`}
               >
-                {WORKER_JOB_KINDS.map((k) => (
+                {MANUAL_JOB_KINDS.map((k) => (
                   <option key={k} value={k}>
                     {WORKER_JOB_KIND_INFO[k].label} ({canRun(k).length} máy sẵn sàng)
                   </option>
