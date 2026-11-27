@@ -20,7 +20,65 @@ import {
   type MediaJobsResponse,
 } from '@maris/contracts';
 import { btnCls, btnGhostCls, inputCls } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, fileUrl } from '@/lib/api';
+
+/** A finished image: small preview, open and download. */
+function Output({ o }: { o: MediaJobResponse['outputs'][number] }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [ext, setExt] = useState('jpg');
+  useEffect(() => {
+    let u: string | null = null;
+    fileUrl(`/content/items/${o.itemId}/versions/1/file?inline=1`)
+      .then(async (x) => {
+        setUrl((u = x));
+        const type = (await (await fetch(x)).blob()).type;
+        setExt(type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg');
+      })
+      .catch(() => setUrl(null));
+    return () => {
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [o.itemId]);
+  return (
+    <li className="flex items-center gap-3 rounded border border-line p-2">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={o.title}
+          className="h-20 w-20 rounded border border-line object-contain"
+        />
+      ) : (
+        <span className="flex h-20 w-20 items-center justify-center rounded border border-line text-xs text-muted">
+          …
+        </span>
+      )}
+      <span className="grid gap-1">
+        <span className="text-sm">
+          {IMAGE_PRESET_INFO[o.preset].label}{' '}
+          <span className="text-xs text-muted">({ITEM_STATUS_LABEL[o.status]})</span>
+        </span>
+        <span className="flex flex-wrap gap-2">
+          {url && (
+            <a
+              className={`${btnCls} px-2 py-0.5 text-xs`}
+              href={url}
+              download={`${o.title.replace(/[\\/:*?"<>|]/g, '-')}.${ext}`}
+            >
+              Tải về
+            </a>
+          )}
+          <Link
+            className={`${btnGhostCls} px-2 py-0.5 text-xs`}
+            href={`/content/items?open=${o.itemId}`}
+          >
+            Mở để duyệt
+          </Link>
+        </span>
+      </span>
+    </li>
+  );
+}
 
 const STATUS_CLS: Record<MediaJobResponse['status'], string> = {
   queued: 'border-line text-muted',
@@ -357,17 +415,9 @@ export function ImageProcessor({
               )}
               {j.errorMessage && <p className="mt-1 text-xs text-danger">{j.errorMessage}</p>}
               {j.outputs.length > 0 && (
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                   {j.outputs.map((o) => (
-                    <li key={o.itemId}>
-                      <Link
-                        className="text-accent underline"
-                        href={`/content/items?open=${o.itemId}`}
-                      >
-                        {o.title}
-                      </Link>{' '}
-                      <span className="text-xs text-muted">({ITEM_STATUS_LABEL[o.status]})</span>
-                    </li>
+                    <Output key={o.itemId} o={o} />
                   ))}
                 </ul>
               )}

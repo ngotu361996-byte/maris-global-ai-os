@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   ASSET_KIND_LABEL,
@@ -287,6 +288,14 @@ function ItemsPage() {
       {ok && <Notice kind="ok">{ok}</Notice>}
 
       <Panel title="Thêm thành phẩm">
+        <p className="mb-3 max-w-4xl rounded border border-line p-2 text-sm text-muted">
+          Ở đây là nơi cất thành phẩm và để AI viết chữ. Muốn{' '}
+          <b>gắn logo, đổi cỡ ảnh, làm thumbnail</b>: vào{' '}
+          <Link className="text-accent underline" href="/content">
+            Kho nội dung gốc
+          </Link>
+          , bấm vào ảnh, dùng phần “Xử lý ảnh”. Ảnh làm xong sẽ tự thêm vào danh sách dưới đây.
+        </p>
         <form onSubmit={create} className="grid max-w-4xl gap-3" autoComplete="off">
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="text-sm sm:col-span-2">
@@ -540,13 +549,15 @@ function ItemsPage() {
               </button>
             </p>
           )}
-          <AiWriter
-            detail={detail}
-            assets={assets}
-            onChange={(d, msg) => (msg ? done(d, msg) : setDetail(d))}
-            onOpen={setSelected}
-            onError={fail}
-          />
+          {(detail.kind === 'text' || detail.kind === 'ad' || detail.kind === 'other') && (
+            <AiWriter
+              detail={detail}
+              assets={assets}
+              onChange={(d, msg) => (msg ? done(d, msg) : setDetail(d))}
+              onOpen={setSelected}
+              onError={fail}
+            />
+          )}
           {detail.reviewNote && (
             <p className="mb-3 text-sm">
               <span className="text-muted">Ghi chú duyệt ({detail.reviewedByName}):</span>{' '}
