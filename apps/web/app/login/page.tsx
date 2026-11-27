@@ -22,11 +22,11 @@ export default function LoginPage() {
         mode === 'login'
           ? { email: f.email, password: f.password, ...(f.totp ? { totp: f.totp } : {}) }
           : { email: f.email, password: f.password, displayName: f.displayName, tenantName: f.tenantName };
-      const res = await api<SessionResponse>(mode === 'login' ? '/auth/login' : '/auth/bootstrap', {
+      await api<Partial<SessionResponse>>(mode === 'login' ? '/auth/login' : '/auth/bootstrap', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      session.set(res.token);
+      session.clear();
       router.replace('/');
     } catch (err) {
       if (err instanceof ApiRequestError && err.code === 'MFA_REQUIRED') setNeedTotp(true);

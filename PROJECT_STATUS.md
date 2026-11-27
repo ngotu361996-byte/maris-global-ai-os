@@ -1,26 +1,32 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **2 – Core Platform (Sprint 1)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **2 – Core Platform (Sprint 2)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
-| 2. Core Platform | Đang làm: Sprint 1 |
+| 2. Core Platform | Sprint 1 đã merge; Sprint 2 đang review |
 | 3–14 | Chưa bắt đầu |
 
-## Sprint 1 đã có
+## Sprint 1 (đã merge)
 
 - Monorepo pnpm + Turborepo, Docker Compose (PostgreSQL 16 + pgvector, Redis, MinIO)
 - Migration `0001`: schema `identity`, `security`, Row-Level Security theo tenant, role runtime `maris_app`
-- API: bootstrap Owner (một lần), đăng nhập, khóa tài khoản sau 5 lần sai, phiên token băm SHA-256, MFA TOTP (secret mã hóa AES-256-GCM)
-- Tenant hiện hành qua `X-Tenant-Id` (kiểm tra thành viên phía server), RBAC 4 vai trò mặc định, chặn tự nâng quyền
-- Audit log append-only với chuỗi hash và API kiểm tra toàn vẹn
-- Web: đăng nhập, khởi tạo, khung giao diện 5 vùng, Dark/Light, tiếng Việt
-- CI: gitleaks, build, typecheck, migrate, test e2e trên Postgres thật, pnpm audit
+- Bootstrap Owner, đăng nhập, khóa tài khoản, MFA TOTP, Tenant qua `X-Tenant-Id`, RBAC 4 vai trò, audit log chuỗi hash
+- Web: đăng nhập, khung giao diện 5 vùng; CI đầy đủ
 
-## Chưa làm (Sprint 2)
+## Sprint 2
 
-- Mời thành viên, đổi vai trò, gỡ thành viên
-- Secret Vault, Queue (BullMQ), rate limit, API Gateway
-- Chuyển token sang cookie httpOnly; next-intl (vi, en)
-- Audit cho sự kiện cấp người dùng (MFA bật/tắt, đăng nhập)
+- Migration `0002`: lời mời, Secret Vault, outbox, quyền `secrets.read` / `secrets.manage`
+- Mời thành viên (token dùng một lần, 7 ngày), chấp nhận lời mời, đổi vai trò, gỡ thành viên
+- Secret Vault chỉ ghi: `POST/GET/DELETE /api/v1/secrets`, trả về `secret://<id>`
+- Outbox → BullMQ `maris-events`
+- Rate limit trên Redis (toàn API, đăng nhập, chấp nhận lời mời, MFA)
+- Phiên trình duyệt bằng cookie httpOnly + header chống CSRF; web không còn giữ token
+
+## Còn lại của Giai đoạn 2
+
+- Giao diện quản lý thành viên, lời mời và Secret Vault trên web
+- Gửi email lời mời (hiện Owner tự chia sẻ đường dẫn/token)
+- next-intl (vi, en); audit cho sự kiện cấp người dùng (đăng nhập, bật MFA)
+- Xoay vòng khóa `VAULT_MASTER_KEY` (cột `key_version` đã có)

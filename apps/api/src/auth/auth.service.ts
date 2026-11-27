@@ -198,7 +198,7 @@ export class AuthService {
     return ownerRoleId;
   }
 
-  private async createSession(userId: string, client: ClientInfo): Promise<SessionResponse> {
+  async createSession(userId: string, client: ClientInfo): Promise<SessionResponse> {
     const { token, hash } = newSessionToken();
     const expiresAt = new Date(Date.now() + this.config.SESSION_TTL_HOURS * 3600_000);
     await this.db.db.insert(sessions).values({
