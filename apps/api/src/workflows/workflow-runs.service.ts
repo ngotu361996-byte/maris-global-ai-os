@@ -31,6 +31,7 @@ import type { Ctx } from '../ai/chat.service';
 import { ControlService } from '../ai/control.service';
 import { checkInputs, skillTaskBody } from '../ai/skills.service';
 import { assertLevel, TasksService } from '../ai/tasks.service';
+import { ConnectorsService, StepFailure } from '../connectors/connectors.service';
 import {
   conditionText,
   evaluate,
@@ -89,6 +90,7 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
     private readonly control: ControlService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly connectors: ConnectorsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -406,6 +408,24 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
       } else if (run.wait?.kind === 'approval') {
         await save({ status: 'waiting_approval' });
         return;
+      } else if (run.wait?.kind === 'connector') {
+        let call = await this.connectors.callRow(tx, run.wait.callId);
+        if (call.status === 'pending') {
+          if (this.connectors.isInFlight(call.id)) return;
+          await this.connectors.abandon(tx, call.id);
+          call = await this.connectors.callRow(tx, call.id);
+        }
+        const label = nodeOf(graph, run.currentNode!).label;
+        if (call.status !== 'ok') {
+          await this.finishStep(tx, runId, 'failed', call.errorMessage);
+          return fail(
+            call.errorCode ?? 'CONNECTOR_CALL_FAILED',
+            `Bước "${label}": ${call.errorMessage ?? 'gọi Connector không thành công'}`,
+          );
+        }
+        await this.finishStep(tx, runId, 'completed', call.output);
+        state.outputs[run.currentNode!] = (call.output ?? '').slice(0, OUTPUT_CHARS);
+        run = await save({ wait: null, currentNode: following(graph, run.currentNode!) });
       }
 
       for (;;) {
@@ -504,6 +524,37 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
                 wait: { kind: 'approval' },
               });
               return;
+            case 'connector': {
+              await this.control.assertRunning(tx, tenantId);
+              const inputs = Object.fromEntries(
+                Object.entries(node.inputs).map(([k, v]) => [k, render(v, state)]),
+              );
+              let call: { callId: string; request: string };
+              try {
+                call = await this.connectors.prepareForRun(
+                  tx,
+                  tenantId,
+                  run.startedBy,
+                  node.connectorKey,
+                  node.capability,
+                  inputs,
+                  runId,
+                );
+              } catch (e) {
+                if (e instanceof StepFailure) throw new StepError(e.code, e.message);
+                throw e;
+              }
+              await this.addStep(tx, tenantId, runId, node, 'waiting', call.request, null);
+              await save({
+                currentNode: node.id,
+                wait: { kind: 'connector', callId: call.callId },
+              });
+              after.push(async () => {
+                await this.connectors.execute(tenantId, call.callId);
+                await this.enqueue({ tenantId, runId });
+              });
+              return;
+            }
             case 'ai':
             case 'skill': {
               const task = await this.createTask(tx, ctx, run, graph, node, state, cost);

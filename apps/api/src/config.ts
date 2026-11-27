@@ -22,6 +22,11 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // Allow connectors to call private networks (n8n on this machine or the office LAN). Off by default (SSRF).
+  CONNECTOR_ALLOW_PRIVATE_URLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   AI_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
   // Runs approved AI tasks from the maris-tasks queue in this process.
   AI_TASK_WORKER_ENABLED: z

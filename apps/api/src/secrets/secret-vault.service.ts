@@ -75,6 +75,16 @@ export class SecretVaultService {
     return this.open(row.ciphertext, tenantId, row.id);
   }
 
+  /** Resolves by name, for connectors, whose exported files carry secret names rather than ids. */
+  async resolveByName(tx: Tx, tenantId: string, name: string): Promise<string> {
+    const [row] = await tx
+      .select()
+      .from(secrets)
+      .where(and(eq(secrets.tenantId, tenantId), eq(secrets.name, name), isNull(secrets.deletedAt)));
+    if (!row) throw new NotFoundException({ code: 'SECRET_NOT_FOUND', message: `Chưa có secret "${name}" trong Secret Vault` });
+    return this.open(row.ciphertext, tenantId, row.id);
+  }
+
   private seal(value: string, tenantId: string, id: string): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);

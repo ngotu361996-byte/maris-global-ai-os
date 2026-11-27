@@ -14,6 +14,7 @@ import {
   WORKFLOW_RUN_STATUS_LABEL,
   type AgentResponse,
   type ConditionOperator,
+  type ConnectorResponse,
   type SkillField,
   type SkillFieldType,
   type SkillResponse,
@@ -63,6 +64,7 @@ export default function WorkflowsPage() {
   const me = useMe();
   const [workflows, setWorkflows] = useState<WorkflowResponse[]>([]);
   const [skills, setSkills] = useState<SkillResponse[]>([]);
+  const [connectors, setConnectors] = useState<ConnectorResponse[]>([]);
   const [agents, setAgents] = useState<AgentResponse[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('design');
@@ -81,6 +83,9 @@ export default function WorkflowsPage() {
       .catch(() => undefined);
     api<AgentResponse[]>('/ai/agents')
       .then(setAgents)
+      .catch(() => undefined);
+    api<ConnectorResponse[]>('/connectors')
+      .then(setConnectors)
       .catch(() => undefined);
   }, []);
   useEffect(() => {
@@ -309,6 +314,7 @@ export default function WorkflowsPage() {
           key={`${current.id}-${current.version}`}
           wf={current}
           skills={skills}
+          connectors={connectors}
           agents={agents}
           tab={tab}
           setTab={setTab}
@@ -326,6 +332,7 @@ export default function WorkflowsPage() {
 function WorkflowPanel({
   wf,
   skills,
+  connectors,
   agents,
   tab,
   setTab,
@@ -337,6 +344,7 @@ function WorkflowPanel({
 }: {
   wf: WorkflowResponse;
   skills: SkillResponse[];
+  connectors: ConnectorResponse[];
   agents: AgentResponse[];
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -433,6 +441,7 @@ function WorkflowPanel({
         <Designer
           wf={wf}
           skills={skills}
+          connectors={connectors}
           agents={agents}
           busy={busy}
           run={run}
@@ -474,6 +483,8 @@ function newNode(type: WorkflowNodeType, taken: string[]): EditNode {
       } as EditNode;
     case 'skill':
       return { id, type, label, skillKey: '', inputs: {}, agentKey: null } as EditNode;
+    case 'connector':
+      return { id, type, label, connectorKey: '', capability: '', inputs: {} } as EditNode;
     case 'condition':
       return {
         id,
@@ -503,6 +514,7 @@ function newNode(type: WorkflowNodeType, taken: string[]): EditNode {
 function Designer({
   wf,
   skills,
+  connectors,
   agents,
   busy,
   run,
@@ -511,6 +523,7 @@ function Designer({
 }: {
   wf: WorkflowResponse;
   skills: SkillResponse[];
+  connectors: ConnectorResponse[];
   agents: AgentResponse[];
   busy: boolean;
   run: (fn: () => Promise<void>) => Promise<void>;
@@ -621,6 +634,7 @@ function Designer({
             <NodeFields
               node={n}
               skills={skills}
+              connectors={connectors}
               agents={agents}
               set={(p) => set(i, p)}
               targetOptions={targetOptions}
@@ -699,12 +713,14 @@ function Designer({
 function NodeFields({
   node,
   skills,
+  connectors,
   agents,
   set,
   targetOptions,
 }: {
   node: EditNode;
   skills: SkillResponse[];
+  connectors: ConnectorResponse[];
   agents: AgentResponse[];
   set: (patch: Record<string, unknown>) => void;
   targetOptions: (self: string, endLabel: string) => ReactNode;
@@ -813,6 +829,73 @@ function NodeFields({
                 value={node.inputs[f.name] ?? ''}
                 onChange={(e) => set({ inputs: { ...node.inputs, [f.name]: e.target.value } })}
                 placeholder="{{input.ten_o}} hoặc chữ cố định"
+                className={`${inputCls} mt-1`}
+              />
+            </label>
+          ))}
+        </div>
+      );
+    }
+    case 'connector': {
+      const usable = connectors.filter((c) => c.kind === 'http');
+      const conn = usable.find((c) => c.key === node.connectorKey);
+      const cap = conn?.capabilities.find((c) => c.key === node.capability);
+      return (
+        <div className="grid gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="text-xs">
+              Connector
+              <select
+                value={node.connectorKey}
+                onChange={(e) => set({ connectorKey: e.target.value, capability: '', inputs: {} })}
+                className={`${inputCls} mt-1`}
+              >
+                <option value="">(chọn Connector)</option>
+                {usable.map((c) => (
+                  <option key={c.id} value={c.key}>
+                    {c.name}
+                    {c.status !== 'active' ? ' (chưa bật)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs">
+              Thao tác
+              <select
+                value={node.capability}
+                onChange={(e) => set({ capability: e.target.value, inputs: {} })}
+                className={`${inputCls} mt-1`}
+              >
+                <option value="">(chọn thao tác)</option>
+                {conn?.capabilities.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                    {c.risk === 'write' ? ' (gửi ra ngoài)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {cap?.risk === 'write' && (
+            <p className="text-xs text-accent">
+              Bước này gửi hoặc thay đổi dữ liệu bên ngoài MARIS. Nên đặt một bước Duyệt ngay trước
+              nó.
+            </p>
+          )}
+          {conn && conn.status !== 'active' && (
+            <p className="text-xs text-danger">
+              Connector này chưa bật: lần chạy sẽ dừng ở bước này cho tới khi người có quyền duyệt
+              bật nó ở trang Connector.
+            </p>
+          )}
+          {cap?.inputs.map((f) => (
+            <label key={f.name} className="text-xs">
+              {f.label}
+              {!f.required && ' (không bắt buộc)'}
+              <input
+                value={node.inputs[f.name] ?? ''}
+                onChange={(e) => set({ inputs: { ...node.inputs, [f.name]: e.target.value } })}
+                placeholder="{{input.ten_o}}, {{steps.ma_buoc}} hoặc chữ cố định"
                 className={`${inputCls} mt-1`}
               />
             </label>
@@ -1315,7 +1398,7 @@ function Runs({
                       </div>
                     </details>
                   ) : (
-                    <div className="mt-1 text-xs">
+                    <div className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
                       → {s.nodeType === 'trigger' ? 'Đã nhận dữ liệu' : s.output}
                     </div>
                   ))}

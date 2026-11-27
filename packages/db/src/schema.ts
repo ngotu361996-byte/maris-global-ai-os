@@ -496,7 +496,11 @@ export interface WorkGraphData {
   nodes: ({ id: string; type: string; label: string; next?: string | null } & Record<string, unknown>)[];
 }
 export type WorkflowRunStatus = 'running' | 'waiting_approval' | 'paused' | 'completed' | 'failed' | 'cancelled';
-export type WorkflowWait = { kind: 'task'; taskId: string } | { kind: 'approval' } | { kind: 'delay'; until: string };
+export type WorkflowWait =
+  | { kind: 'task'; taskId: string }
+  | { kind: 'approval' }
+  | { kind: 'delay'; until: string }
+  | { kind: 'connector'; callId: string };
 
 export const workflowDefinitions = work.table('workflow_definitions', {
   id: uuid('id').primaryKey(),
@@ -562,4 +566,85 @@ export const workflowRunSteps = work.table('workflow_run_steps', {
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   startedAt: ts('started_at').notNull().defaultNow(),
   finishedAt: ts('finished_at'),
+});
+
+export const integration = pgSchema('integration');
+
+/** Stored connector parts; their shape is validated by the API (contracts `connectors.ts`). */
+export type ConnectorAuthData =
+  | { type: 'none' }
+  | { type: 'bearer'; secret: string }
+  | { type: 'header'; header: string; secret: string }
+  | { type: 'query'; param: string; secret: string }
+  | { type: 'path'; secret: string };
+export interface ConnectorCapabilityData {
+  key: string;
+  label: string;
+  description: string;
+  risk: 'read' | 'write';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  query: Record<string, string>;
+  body: string | null;
+  inputs: AiSkillManifestData['inputs'];
+  outputPath: string | null;
+}
+export interface ConnectorWebhookData {
+  workflowKey: string | null;
+  runBudgetUsd: number;
+}
+
+export const connectors = integration.table('connectors', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  kind: text('kind').$type<'http' | 'webhook'>().notNull(),
+  source: text('source').$type<'template' | 'created' | 'imported'>().notNull(),
+  status: text('status').$type<'draft' | 'active' | 'paused'>().notNull().default('draft'),
+  baseUrl: text('base_url'),
+  auth: jsonb('auth').$type<ConnectorAuthData>().notNull(),
+  headers: jsonb('headers').$type<Record<string, string>>().notNull().default({}),
+  timeoutSec: integer('timeout_sec').notNull().default(15),
+  capabilities: jsonb('capabilities').$type<ConnectorCapabilityData[]>().notNull().default([]),
+  webhook: jsonb('webhook').$type<ConnectorWebhookData | null>(),
+  webhookTokenHash: text('webhook_token_hash'),
+  checksum: text('checksum').notNull(),
+  activatedBy: uuid('activated_by'),
+  activatedAt: ts('activated_at'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const connectorCalls = integration.table('connector_calls', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  connectorId: uuid('connector_id').notNull(),
+  capability: text('capability').notNull(),
+  risk: text('risk').$type<'read' | 'write'>().notNull(),
+  status: text('status').$type<'pending' | 'ok' | 'failed'>().notNull().default('pending'),
+  request: text('request').notNull(),
+  httpStatus: integer('http_status'),
+  durationMs: integer('duration_ms'),
+  output: text('output'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  workflowRunId: uuid('workflow_run_id'),
+  calledBy: uuid('called_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
+});
+
+export const webhookEvents = integration.table('webhook_events', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  connectorId: uuid('connector_id').notNull(),
+  status: text('status').$type<'accepted' | 'rejected' | 'started'>().notNull(),
+  detail: text('detail').notNull(),
+  bodyExcerpt: text('body_excerpt').notNull().default(''),
+  workflowRunId: uuid('workflow_run_id'),
+  receivedAt: ts('received_at').notNull().defaultNow(),
 });
