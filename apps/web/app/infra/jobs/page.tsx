@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
+  CODE_LANGUAGE_LABEL,
+  CODE_LANGUAGES,
   DEVICE_KIND_LABEL,
+  SANDBOX_LIMITS,
   WORKER_JOB_KIND_INFO,
   WORKER_JOB_KINDS,
   WORKER_JOB_STATUS_LABEL,
+  type CodeRunResult,
   type DeviceResponse,
   type WorkerJobKind,
   type WorkerJobLogResponse,
@@ -39,9 +43,53 @@ function time(iso: string | null) {
   return iso ? new Date(iso).toLocaleTimeString('vi-VN') : '–';
 }
 
+const CODE_SAMPLE: Record<string, string> = {
+  python:
+    'import sys\n\nname = sys.stdin.read().strip() or "MARIS"\nprint(f"Xin chào {name}!")\nprint(sum(range(1, 101)))\n',
+  node: "const name = require('fs').readFileSync(0, 'utf8').trim() || 'MARIS';\nconsole.log(`Xin chào ${name}!`);\nconsole.log([...Array(100).keys()].reduce((a, b) => a + b + 1, 0));\n",
+};
+
+function Output({ label, text, cut }: { label: string; text: string; cut: boolean }) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1 text-xs text-muted">
+        {label}
+        {cut ? ` (chỉ giữ ${SANDBOX_LIMITS.outputMaxBytes / 1024} KB đầu)` : ''}
+      </div>
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-bg p-2 font-mono text-xs">
+        {text || <span className="text-muted">(trống)</span>}
+      </pre>
+    </div>
+  );
+}
+
 function Result({ job }: { job: JobDetail }) {
   if (job.result === null || job.result === undefined) return null;
   const r = job.result as Record<string, unknown>;
+  if (job.kind === 'code.run' && typeof r.stdout === 'string') {
+    const c = job.result as CodeRunResult;
+    return (
+      <>
+        <div className="mb-2 text-sm">
+          {c.timedOut ? (
+            <span className="text-danger">Quá thời gian, đã dừng</span>
+          ) : (
+            <span className={c.exitCode === 0 ? 'text-green-500' : 'text-danger'}>
+              Mã thoát {c.exitCode}
+            </span>
+          )}
+          <span className="text-muted">
+            {' '}
+            · {CODE_LANGUAGE_LABEL[c.language]} · {Math.round(c.durationMs / 100) / 10} giây
+          </span>
+        </div>
+        <Output label="Kết quả in ra (stdout)" text={c.stdout} cut={c.stdoutTruncated} />
+        {(c.stderr || c.stderrTruncated) && (
+          <Output label="Thông báo lỗi (stderr)" text={c.stderr} cut={c.stderrTruncated} />
+        )}
+      </>
+    );
+  }
   if (job.kind === 'ollama.generate' && typeof r.response === 'string')
     return (
       <div className="mb-3">
@@ -73,6 +121,7 @@ export default function WorkerJobsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [kind, setKind] = useState<WorkerJobKind>('diagnostics');
+  const [language, setLanguage] = useState<(typeof CODE_LANGUAGES)[number]>('python');
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,8 +166,14 @@ export default function WorkerJobsPage() {
               prompt: String(f.get('prompt')),
               maxTokens: Number(f.get('maxTokens')),
             }
-          : {};
-    const target = String(f.get('target'));
+          : kind === 'code.run'
+            ? {
+                language: String(f.get('language')),
+                code: String(f.get('code')),
+                stdin: String(f.get('stdin') ?? ''),
+              }
+            : {};
+    const target = String(f.get('target') ?? '');
     setError(null);
     setOk(null);
     setBusy(true);
@@ -133,6 +188,9 @@ export default function WorkerJobsPage() {
           targetDeviceId: target.startsWith('device:') ? target.slice(7) : null,
           targetKinds: target.startsWith('kind:') ? [target.slice(5)] : [],
           needGpu: f.get('needGpu') === 'on',
+          ...(kind === 'code.run'
+            ? { timeoutSec: Number(f.get('timeoutSec')), maxAttempts: 1 }
+            : {}),
         }),
       });
       setOk(`Đã giao “${j.title}”. Worker phù hợp sẽ nhận trong vài giây.`);
@@ -175,6 +233,7 @@ export default function WorkerJobsPage() {
   const usable = devices.filter((d) => d.status !== 'revoked');
   const ready = usable.filter((d) => d.online && d.status === 'active' && d.maxJobs > 0);
   const canRun = (k: WorkerJobKind) => ready.filter((d) => d.capabilities.includes(k));
+  const runners = usable.filter((d) => d.kind === 'code_runner');
 
   return (
     <Shell me={me}>
@@ -182,7 +241,8 @@ export default function WorkerJobsPage() {
       <p className="mb-6 max-w-3xl text-sm text-muted">
         Giao việc cho các máy chạy Worker. Máy trực tuyến, đang hoạt động, còn chỗ trống và đủ RAM,
         ổ đĩa sẽ tự nhận việc. Máy mất kết nối quá 60 giây thì việc tự chuyển sang máy khác. Worker
-        chỉ làm các loại việc có sẵn trong chương trình, không chạy lệnh tùy ý.
+        chỉ làm các loại việc có sẵn trong chương trình, không chạy lệnh tùy ý. Mã Python/Node chỉ
+        chạy trong sandbox trên máy Code Runner mà chủ máy đã bật chạy mã.
       </p>
       {error && <Notice kind="error">{error}</Notice>}
       {ok && <Notice kind="ok">{ok}</Notice>}
@@ -278,10 +338,95 @@ export default function WorkerJobsPage() {
             </>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          {kind === 'code.run' && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="text-sm">
+                  Ngôn ngữ
+                  <select
+                    name="language"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as (typeof CODE_LANGUAGES)[number])}
+                    className={`${inputCls} mt-1`}
+                  >
+                    {CODE_LANGUAGES.map((l) => (
+                      <option key={l} value={l}>
+                        {CODE_LANGUAGE_LABEL[l]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  Giới hạn thời gian (giây)
+                  <input
+                    name="timeoutSec"
+                    type="number"
+                    min={10}
+                    max={SANDBOX_LIMITS.maxTimeoutSec}
+                    defaultValue={WORKER_JOB_KIND_INFO['code.run'].timeoutSec}
+                    className={`${inputCls} mt-1`}
+                  />
+                </label>
+                <label className="text-sm">
+                  Máy Code Runner
+                  <select name="target" defaultValue="" className={`${inputCls} mt-1`}>
+                    <option value="">Máy Code Runner bất kỳ</option>
+                    {runners.map((d) => (
+                      <option key={d.id} value={`device:${d.id}`}>
+                        {d.name}
+                        {d.online ? '' : ' (ngoại tuyến)'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="text-sm">
+                Mã nguồn
+                <textarea
+                  key={language}
+                  name="code"
+                  required
+                  rows={10}
+                  maxLength={SANDBOX_LIMITS.codeMaxChars}
+                  defaultValue={CODE_SAMPLE[language]}
+                  spellCheck={false}
+                  className={`${inputCls} mt-1 font-mono text-xs`}
+                />
+              </label>
+              <label className="text-sm">
+                Dữ liệu vào (stdin, không bắt buộc)
+                <textarea
+                  name="stdin"
+                  rows={2}
+                  maxLength={SANDBOX_LIMITS.stdinMaxChars}
+                  spellCheck={false}
+                  className={`${inputCls} mt-1 font-mono text-xs`}
+                />
+              </label>
+              <p className="text-xs text-muted">
+                Mã chạy trong container Docker riêng, xóa ngay sau khi chạy: không mạng, không đọc
+                hay ghi được file của máy, tối đa {SANDBOX_LIMITS.memoryMb} MB RAM,{' '}
+                {SANDBOX_LIMITS.cpus} nhân CPU, {SANDBOX_LIMITS.pids} tiến trình. Chỉ người có quyền
+                “chạy mã” mới giao được việc này, và mỗi lần giao đều ghi nhật ký kiểm toán.
+              </p>
+              {canRun('code.run').length === 0 && (
+                <p className="text-xs text-yellow-500">
+                  {runners.length === 0
+                    ? 'Chưa có thiết bị loại Code Runner. Vào trang VPS, Worker, GPU, thêm thiết bị với loại “Code Runner” rồi ghép nối máy đó.'
+                    : 'Chưa máy Code Runner nào sẵn sàng chạy mã. Trên máy đó: mở Docker Desktop, rồi chạy Worker bằng lệnh pnpm worker run --allow-code.'}
+                </p>
+              )}
+            </>
+          )}
+
+          <div className={`grid gap-3 sm:grid-cols-3 ${kind === 'code.run' ? 'hidden' : ''}`}>
             <label className="text-sm">
               Chạy trên
-              <select name="target" defaultValue="" className={`${inputCls} mt-1`}>
+              <select
+                name={kind === 'code.run' ? undefined : 'target'}
+                defaultValue=""
+                className={`${inputCls} mt-1`}
+              >
                 <option value="">Máy bất kỳ phù hợp</option>
                 <optgroup label="Theo loại máy">
                   {[...new Set(usable.map((d) => d.kind))].map((k) => (
@@ -450,13 +595,24 @@ export default function WorkerJobsPage() {
                 </div>
               ))}
           </dl>
-          {Object.keys(detail.input).length > 0 && (
+          {detail.kind === 'code.run' && typeof detail.input.code === 'string' ? (
             <div className="mb-3">
-              <div className="mb-1 text-xs text-muted">Ô nhập</div>
-              <pre className="max-h-40 overflow-auto rounded-md border border-line bg-bg p-2 text-xs">
-                {JSON.stringify(detail.input, null, 2)}
+              <div className="mb-1 text-xs text-muted">
+                Mã nguồn ({CODE_LANGUAGE_LABEL[detail.input.language as 'python'] ?? '?'})
+              </div>
+              <pre className="max-h-60 overflow-auto rounded-md border border-line bg-bg p-2 font-mono text-xs">
+                {detail.input.code}
               </pre>
             </div>
+          ) : (
+            Object.keys(detail.input).length > 0 && (
+              <div className="mb-3">
+                <div className="mb-1 text-xs text-muted">Ô nhập</div>
+                <pre className="max-h-40 overflow-auto rounded-md border border-line bg-bg p-2 text-xs">
+                  {JSON.stringify(detail.input, null, 2)}
+                </pre>
+              </div>
+            )
           )}
           <Result job={detail} />
           <div className="mb-1 text-xs text-muted">Nhật ký</div>

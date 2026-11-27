@@ -1,6 +1,6 @@
 {
   "name": "@maris/worker",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "private": true,
   "description": "MARIS Worker: runs on a machine, connects out to MARIS and reports its resources.",
   "main": "dist/cli.js",

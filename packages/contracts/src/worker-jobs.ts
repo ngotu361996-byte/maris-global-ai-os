@@ -3,9 +3,16 @@ import { DEVICE_KINDS, type DeviceKind } from './devices';
 
 /**
  * Work for workers (spec Part 26). Each kind is implemented inside the worker program; there is no
- * kind that runs a shell command or code sent from the server. Code runs wait for the sandbox.
+ * kind that runs a shell command. `code.run` runs Python or Node code only inside a locked-down
+ * Docker container, only on a device of kind code_runner whose owner started the worker with
+ * --allow-code, and only for people with the infra.code permission.
  */
-export const WORKER_JOB_KINDS = ['diagnostics', 'ollama.generate', 'test.wait'] as const;
+export const WORKER_JOB_KINDS = [
+  'diagnostics',
+  'ollama.generate',
+  'test.wait',
+  'code.run',
+] as const;
 export type WorkerJobKind = (typeof WORKER_JOB_KINDS)[number];
 
 export const WORKER_JOB_KIND_INFO: Record<
@@ -27,7 +34,32 @@ export const WORKER_JOB_KIND_INFO: Record<
     description: 'Đếm giây và báo tiến độ, để thử phân việc, hủy và chuyển máy',
     timeoutSec: 900,
   },
+  'code.run': {
+    label: 'Chạy mã trong sandbox',
+    description:
+      'Chạy mã Python hoặc Node.js trong container Docker cách ly: không mạng, không ghi đĩa, giới hạn RAM, CPU và thời gian',
+    timeoutSec: 120,
+  },
 };
+
+/** Device kinds that may run code.run; the server adds this target to every code job. */
+export const CODE_RUNNER_KINDS = ['code_runner'] as const satisfies readonly DeviceKind[];
+export const CODE_LANGUAGES = ['python', 'node'] as const;
+export type CodeLanguage = (typeof CODE_LANGUAGES)[number];
+export const CODE_LANGUAGE_LABEL: Record<CodeLanguage, string> = {
+  python: 'Python 3.12',
+  node: 'Node.js 22',
+};
+/** Limits of one sandbox run. The worker enforces them; the server checks code size and time. */
+export const SANDBOX_LIMITS = {
+  codeMaxChars: 50_000,
+  stdinMaxChars: 10_000,
+  memoryMb: 256,
+  cpus: 1,
+  pids: 64,
+  outputMaxBytes: 32 * 1024,
+  maxTimeoutSec: 600,
+} as const;
 
 export const WORKER_JOB_STATUSES = [
   'queued',
@@ -69,6 +101,13 @@ export const workerJobInputSchemas = {
       seconds: z.number().int().min(1).max(600).default(30),
       /** Fail at the end, to try error handling. */
       fail: z.boolean().default(false),
+    })
+    .strict(),
+  'code.run': z
+    .object({
+      language: z.enum(CODE_LANGUAGES),
+      code: z.string().min(1).max(SANDBOX_LIMITS.codeMaxChars),
+      stdin: z.string().max(SANDBOX_LIMITS.stdinMaxChars).default(''),
     })
     .strict(),
 } satisfies Record<WorkerJobKind, z.ZodType>;
@@ -162,6 +201,18 @@ export interface WorkerJobResponse {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+}
+
+/** What a finished code.run job returns. */
+export interface CodeRunResult {
+  language: CodeLanguage;
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
 }
 
 export interface WorkerJobLogResponse {

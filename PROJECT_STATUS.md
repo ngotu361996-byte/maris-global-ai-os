@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 14)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 15, sprint cuối)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -8,7 +8,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
-| 5. Hạ tầng | Sprint 13 (thiết bị, Worker, theo dõi tài nguyên) đã merge; Sprint 14 (giao việc cho Worker) đang review; Sprint 15 (sandbox chạy mã, giám sát hệ thống) |
+| 5. Hạ tầng | Sprint 13–14 đã merge; Sprint 15 (sandbox chạy mã, giám sát hệ thống) đang review. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -130,7 +130,19 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 14 – Giao việc cho Worker (Giai đoạn 5)
+## Sprint 15 – Sandbox chạy mã và giám sát hệ thống (Giai đoạn 5)
+
+- Migration `0015`: quyền `infra.code` (“chạy mã”), chỉ cấp sẵn cho owner và administrator
+- Loại việc `code.run`: chạy Python 3.12 hoặc Node.js 22. Mã tối đa 50.000 ký tự, stdin tối đa 10.000, thời gian tối đa 600 giây (mặc định 120)
+- Ba lớp chặn: người giao phải có `infra.code` (cả khi Giao lại); máy chủ luôn ép việc về loại máy Code Runner và chỉ giao `code.run` cho thiết bị loại `code_runner`, dù Worker khác tự báo làm được; Worker chỉ nhận chạy mã khi chủ máy chạy `pnpm worker run --allow-code` và Docker đang chạy
+- Sandbox: mỗi lần chạy một container Docker mới, xóa ngay sau khi xong: `--network none`, hệ thống file chỉ đọc (chỉ `/tmp` 64 MB trong RAM), RAM 256 MB không swap, 1 CPU, 64 tiến trình, bỏ mọi capability, `no-new-privileges`, người dùng 65534. Mã và stdin đi qua stdin, không nằm trên dòng lệnh. Quá giờ hay bị hủy thì `docker kill`
+- Kết quả: mã thoát, thời gian, stdout và stderr (mỗi thứ tối đa 32 KB). Quá giờ là lỗi `CODE_TIMEOUT` nhưng vẫn giữ phần đã in ra. Audit ghi ngôn ngữ, số ký tự và SHA-256 của mã
+- Giám sát hệ thống `GET /api/v1/system/monitor` (`infra.read`): máy chủ API (thời gian chạy, bộ nhớ), PostgreSQL (độ trễ, dung lượng, số kết nối), Redis (độ trễ, bộ nhớ), 5 hàng đợi BullMQ, sự kiện outbox tồn, hoạt động 24 giờ (gọi AI và tỉ lệ lỗi, việc AI, Workflow, Connector, việc Worker lỗi), thiết bị, 15 lỗi gần nhất. Máy chủ tự xếp từng mục Ổn định / Cần chú ý / Có lỗi. Mỗi phép đo có giới hạn thời gian nên Redis chết không làm treo trang
+- Web: trang `/system` (M37 “Giám sát hệ thống”, tự làm mới mỗi 15 giây); trang Việc của Worker có ô chạy mã (chọn ngôn ngữ, mã mẫu, stdin, giới hạn thời gian) và hiển thị stdout/stderr
+- Worker 0.15.0: `run --allow-code`, tự tải ảnh `python:3.12-alpine`, `node:22-alpine` lúc khởi động
+- Giới hạn: chưa cài thư viện ngoài (pip/npm) trong sandbox, chưa nối Plugin hay bước Workflow với sandbox (Code Runner đầy đủ và AI Studio thuộc Giai đoạn 10); giám sát chưa gửi cảnh báo ra ngoài (email, Telegram)
+
+## Sprint 14 – Giao việc cho Worker (Giai đoạn 5, đã merge)
 
 - Migration `0014`: `infra.worker_jobs`, `infra.worker_job_logs` (RLS); thiết bị có thêm `max_jobs` (số việc chạy cùng lúc) và `capabilities` (loại việc Worker báo làm được)
 - Loại việc cố định, cài sẵn trong chương trình Worker, không có loại nào chạy lệnh shell hay mã từ máy chủ: Kiểm tra máy (`diagnostics`), AI cục bộ qua Ollama trên chính máy đó (`ollama.generate`, địa chỉ cố định 127.0.0.1:11434), Việc thử (`test.wait`). Ô nhập được kiểm tra ở cả máy chủ và Worker

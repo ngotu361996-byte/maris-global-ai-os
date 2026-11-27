@@ -3,6 +3,7 @@ import { HEARTBEAT_INTERVAL_SEC, PAIRING_PREFIX } from '@maris/contracts';
 import { heartbeat, pair, ServerError } from './client';
 import { configPath, loadConfig, normalizeServer, saveConfig } from './config';
 import { capabilities, JobRunner } from './jobs';
+import { dockerAvailable, prepareImages } from './sandbox';
 import { AGENT_VERSION, collectInfo, Sampler } from './metrics';
 
 const HELP = `MARIS Worker ${AGENT_VERSION}
@@ -10,10 +11,14 @@ const HELP = `MARIS Worker ${AGENT_VERSION}
   pair "<chuỗi ghép nối>" --server <địa chỉ MARIS>   Ghép nối máy này (chuỗi dùng được một lần)
   run                                                Chạy, báo cáo tài nguyên mỗi ${HEARTBEAT_INTERVAL_SEC} giây và nhận việc
   run --monitor-only                                 Chỉ báo cáo tài nguyên, không nhận việc
+  run --allow-code                                   Nhận cả việc chạy mã trong sandbox Docker
+                                                     (chỉ trên máy Code Runner, cần Docker đang chạy)
   status                                             Xem máy này đã ghép nối với đâu
 
 Worker chỉ kết nối ra máy chủ MARIS. Nó không mở cổng và không chạy lệnh nào từ máy chủ:
-nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, việc thử).`;
+nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, việc thử).
+Mã chỉ chạy khi chủ máy thêm --allow-code, và luôn chạy trong container Docker không mạng,
+không ghi được đĩa của máy, giới hạn RAM, CPU và thời gian.`;
 
 const time = () => new Date().toLocaleTimeString();
 const say = (msg: string) => console.log(`[${time()}] ${msg}`);
@@ -52,8 +57,16 @@ async function cmdRun(args: string[]): Promise<void> {
   if (!c) throw new Error('Máy này chưa ghép nối. Chạy lệnh pair trước.');
   const sampler = new Sampler();
   const jobsOn = !args.includes('--monitor-only');
+  const allowCode = jobsOn && args.includes('--allow-code');
+  if (allowCode) {
+    if (await dockerAvailable()) {
+      const failed = await prepareImages(say);
+      if (failed.length > 0) say(`Chưa tải được ảnh sandbox: ${failed.join(', ')}`);
+    } else
+      say('Có --allow-code nhưng Docker chưa chạy: chưa nhận việc chạy mã. Mở Docker Desktop.');
+  }
   const runner = jobsOn ? new JobRunner(c.server, c.token, say) : null;
-  let caps = jobsOn ? await capabilities() : [];
+  let caps = jobsOn ? await capabilities({ allowCode }) : [];
   let capsCheckedAt = Date.now();
   let intervalSec = HEARTBEAT_INTERVAL_SEC;
   let failures = 0;
@@ -80,7 +93,7 @@ async function cmdRun(args: string[]): Promise<void> {
     let wait = intervalSec;
     try {
       if (jobsOn && Date.now() - capsCheckedAt > 5 * 60_000) {
-        const next = await capabilities();
+        const next = await capabilities({ allowCode });
         if (next.join() !== caps.join()) say(`Nhận các loại việc: ${next.join(', ')}`);
         caps = next;
         capsCheckedAt = Date.now();

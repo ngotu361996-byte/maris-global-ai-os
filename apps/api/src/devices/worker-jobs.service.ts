@@ -1,11 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, asc, desc, eq, inArray, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
 import {
+  CODE_RUNNER_KINDS,
   JOB_LEASE_SEC,
   JOB_POLL_SEC,
   JOB_RESULT_MAX_BYTES,
   metricAlerts,
+  SANDBOX_LIMITS,
   WORKER_JOB_KIND_INFO,
   workerJobInputSchemas,
   type ClaimJobResponse,
@@ -30,6 +38,13 @@ type LogLevel = 'info' | 'warning' | 'error';
 
 /** A device that lost a job may take it back after it has waited this long for another worker. */
 const EXCLUDE_SEC = 60;
+
+/** May this person queue code.run jobs (the infra.code permission)? */
+export interface JobCreateOptions {
+  canRunCode: boolean;
+}
+
+const isCodeRunner = (kind: string) => (CODE_RUNNER_KINDS as readonly string[]).includes(kind);
 
 const badState = (message: string) => new BadRequestException({ code: 'JOB_STATE', message });
 
@@ -95,7 +110,7 @@ export class WorkerJobsService {
     });
   }
 
-  create(ctx: Ctx, raw: CreateWorkerJob): Promise<WorkerJobResponse> {
+  create(ctx: Ctx, raw: CreateWorkerJob, opts: JobCreateOptions): Promise<WorkerJobResponse> {
     const body = createWorkerJobSchema.parse(raw);
     const parsed = workerJobInputSchemas[body.kind].safeParse(body.input);
     if (!parsed.success)
@@ -103,6 +118,28 @@ export class WorkerJobsService {
         code: 'JOB_INPUT_INVALID',
         message: `Ô nhập không hợp lệ: ${parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ')}`,
       });
+    const isCode = body.kind === 'code.run';
+    let codeMeta: Record<string, unknown> = {};
+    if (isCode) {
+      if (!opts.canRunCode)
+        throw new ForbiddenException({
+          code: 'PERMISSION_DENIED',
+          message: 'Thiếu quyền infra.code',
+        });
+      if (body.timeoutSec !== undefined && body.timeoutSec > SANDBOX_LIMITS.maxTimeoutSec)
+        throw new BadRequestException({
+          code: 'JOB_INPUT_INVALID',
+          message: `Chạy mã tối đa ${SANDBOX_LIMITS.maxTimeoutSec} giây`,
+        });
+      // Code runs only on Code Runner machines, whatever the request asked for.
+      body.targetKinds = [...CODE_RUNNER_KINDS];
+      const input = parsed.data as { language: string; code: string };
+      codeMeta = {
+        language: input.language,
+        codeSha256: createHash('sha256').update(input.code).digest('hex'),
+        codeChars: input.code.length,
+      };
+    }
     return this.db.withContext(ctx, async (tx) => {
       if (body.targetDeviceId) {
         const [d] = await tx
@@ -119,6 +156,11 @@ export class WorkerJobsService {
           throw new BadRequestException({
             code: 'DEVICE_NOT_FOUND',
             message: 'Không có thiết bị đó, hoặc thiết bị đã bị thu hồi',
+          });
+        if (isCode && !isCodeRunner(d.kind))
+          throw new BadRequestException({
+            code: 'DEVICE_NOT_CODE_RUNNER',
+            message: 'Chỉ chạy mã trên thiết bị loại Code Runner',
           });
       }
       const info = WORKER_JOB_KIND_INFO[body.kind];
@@ -142,7 +184,11 @@ export class WorkerJobsService {
         })
         .returning();
       await log(tx, row!, null, 'info', 'Đã giao việc, chờ Worker nhận');
-      await this.log(tx, ctx, 'infra.job.created', id, { kind: body.kind, title: row!.title });
+      await this.log(tx, ctx, 'infra.job.created', id, {
+        kind: body.kind,
+        title: row!.title,
+        ...codeMeta,
+      });
       return respond(row!, new Map());
     });
   }
@@ -203,24 +249,28 @@ export class WorkerJobsService {
   }
 
   /** Queues a copy of a finished job. */
-  retry(ctx: Ctx, id: string): Promise<WorkerJobResponse> {
+  retry(ctx: Ctx, id: string, opts: JobCreateOptions): Promise<WorkerJobResponse> {
     return this.db
       .withContext(ctx, async (tx) => this.row(tx, ctx.tenantId, id))
       .then((job) => {
         if (job.status === 'queued' || job.status === 'running')
           throw badState('Việc chưa kết thúc');
-        return this.create(ctx, {
-          kind: job.kind as WorkerJobKind,
-          title: job.title,
-          input: job.input,
-          priority: job.priority,
-          targetDeviceId: job.targetDeviceId,
-          targetKinds: job.targetKinds,
-          needGpu: job.needGpu,
-          minFreeRamMb: job.minFreeRamMb,
-          timeoutSec: job.timeoutSec,
-          maxAttempts: job.maxAttempts,
-        });
+        return this.create(
+          ctx,
+          {
+            kind: job.kind as WorkerJobKind,
+            title: job.title,
+            input: job.input,
+            priority: job.priority,
+            targetDeviceId: job.targetDeviceId,
+            targetKinds: job.targetKinds,
+            needGpu: job.needGpu,
+            minFreeRamMb: job.minFreeRamMb,
+            timeoutSec: job.timeoutSec,
+            maxAttempts: job.maxAttempts,
+          },
+          opts,
+        );
       });
   }
 
@@ -231,7 +281,10 @@ export class WorkerJobsService {
     const none: ClaimJobResponse = { job: null, pollSec: JOB_POLL_SEC };
     return this.devices.withDevice(deviceKey, async (tx, d) => {
       await sweep(tx, d.tenantId);
-      if (d.status !== 'active' || d.maxJobs === 0 || d.capabilities.length === 0) return none;
+      const kinds = isCodeRunner(d.kind)
+        ? d.capabilities
+        : d.capabilities.filter((c) => c !== 'code.run');
+      if (d.status !== 'active' || d.maxJobs === 0 || kinds.length === 0) return none;
       const [{ n }] = (await tx
         .select({ n: sql<number>`count(*)::int` })
         .from(workerJobs)
@@ -261,7 +314,8 @@ export class WorkerJobsService {
           and(
             eq(workerJobs.tenantId, d.tenantId),
             eq(workerJobs.status, 'queued'),
-            inArray(workerJobs.kind, d.capabilities),
+            // Only a Code Runner device gets code, even if its worker says it can run it.
+            inArray(workerJobs.kind, kinds),
             sql`(${workerJobs.targetDeviceId} IS NULL OR ${workerJobs.targetDeviceId} = ${d.id})`,
             sql`(cardinality(${workerJobs.targetKinds}) = 0 OR ${d.kind} = ANY(${workerJobs.targetKinds}))`,
             gpuOk ? sql`true` : eq(workerJobs.needGpu, false),

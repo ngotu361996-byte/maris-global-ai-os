@@ -100,6 +100,16 @@ việc là một loại cố định trong `WORKER_JOB_KINDS`; Worker thực hi�
 dùng `SELECT … FOR UPDATE SKIP LOCKED` và ghi hạn thuê (`lease_expires_at`); báo tiến độ gia hạn. `sweep()` trả việc hết hạn thuê
 về hàng đợi hoặc báo lỗi, và dừng việc quá giờ; hàm chạy trong transaction của lần hỏi việc hay lần đọc danh sách kế tiếp.
 
+Sandbox chạy mã (Sprint 15): `code.run` là loại việc duy nhất chạy mã người dùng. Máy chủ kiểm tra quyền `infra.code`, ép
+`target_kinds = ['code_runner']` và lọc `code.run` khỏi khả năng của thiết bị không phải Code Runner (lúc nhận nhịp báo và lúc
+nhận việc). Worker (`apps/worker/src/sandbox.ts`) gọi `docker run` bằng `spawn` không qua shell, với container không mạng, chỉ
+đọc, giới hạn RAM/CPU/tiến trình, không capability, người dùng không đặc quyền. Một chương trình khởi động cố định đọc
+`<số byte>\n<mã>` từ stdin rồi chạy mã, phần stdin còn lại để cho chương trình.
+
+Giám sát (`devices/system-monitor.service.ts`, Sprint 15): chỉ đọc, không ghi audit. Phần của cả bản cài (tiến trình API,
+PostgreSQL, Redis, hàng đợi BullMQ) đọc qua kết nối chung; phần của tenant (hoạt động, outbox, việc Worker, thiết bị, lỗi gần
+đây) đọc trong `withContext` nên RLS áp dụng. `buildChecks()` là hàm thuần biến số liệu thành các mục kiểm tra.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

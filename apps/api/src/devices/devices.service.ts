@@ -445,8 +445,11 @@ export class DevicesService {
           lastIp: ip,
           ...(body.capabilities
             ? {
-                capabilities: body.capabilities.filter((c) =>
-                  (WORKER_JOB_KINDS as readonly string[]).includes(c),
+                capabilities: body.capabilities.filter(
+                  (c) =>
+                    (WORKER_JOB_KINDS as readonly string[]).includes(c) &&
+                    // Code runs only on devices an admin registered as Code Runner.
+                    (c !== 'code.run' || row.kind === 'code_runner'),
                 ),
               }
             : {}),
