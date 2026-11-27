@@ -7,7 +7,7 @@ export interface NavItem {
 
 export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   { title: 'Điều hành', items: [{ code: 'M01', name: 'Tổng quan', href: '/' }, { code: 'M02', name: 'AI Tổng điều hành' }, { code: 'M07', name: 'Giao việc' }] },
-  { title: 'AI', items: [{ code: 'M03', name: 'Chat AI' }, { code: 'M04', name: 'AI Provider' }, { code: 'M05', name: 'AI Agent' }, { code: 'M06', name: 'Bộ nhớ và kiến thức' }] },
+  { title: 'AI', items: [{ code: 'M03', name: 'Chat AI', href: '/chat' }, { code: 'M04', name: 'AI Provider', href: '/ai' }, { code: 'M05', name: 'AI Agent' }, { code: 'M06', name: 'Bộ nhớ và kiến thức' }] },
   { title: 'Nội dung', items: [{ code: 'M09', name: 'Kho nội dung gốc' }, { code: 'M10', name: 'Kho thành phẩm' }, { code: 'M11', name: 'Video AI' }] },
   { title: 'Kênh', items: [{ code: 'M17', name: 'Meta' }, { code: 'M18', name: 'Google' }, { code: 'M19', name: 'TikTok' }, { code: 'M20', name: 'YouTube' }] },
   { title: 'Bán hàng', items: [{ code: 'M22', name: 'Shopify' }, { code: 'M26', name: 'POSCake' }] },

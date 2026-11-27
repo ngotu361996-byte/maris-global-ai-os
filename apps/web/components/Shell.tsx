@@ -6,9 +6,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { MeResponse } from '@maris/contracts';
 import { api, session } from '@/lib/api';
 import { NAV_GROUPS } from '@/lib/navigation';
+import { ChatPanel } from '@/components/ChatPanel';
 
 /** Bố cục 5 vùng: sidebar trái, topbar, khu giữa, sidebar phải (AI Chat), drawer dưới. */
-export function Shell({ me, children }: { me: MeResponse; children: React.ReactNode }) {
+export function Shell({ me, children, hideChat }: { me: MeResponse; children: React.ReactNode; hideChat?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const onLogout = async () => {
@@ -18,7 +19,10 @@ export function Shell({ me, children }: { me: MeResponse; children: React.ReactN
   };
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [chatOpen, setChatOpen] = useState(true);
+  // Bumping the key starts a fresh conversation in the side panel; full history lives on /chat.
+  const [sideKey, setSideKey] = useState(0);
   const tenant = me.memberships[0];
+  const canChat = !!tenant;
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -45,7 +49,7 @@ export function Shell({ me, children }: { me: MeResponse; children: React.ReactN
         </button>
         <button
           disabled
-          title="Dừng khẩn cấp: kích hoạt ở Giai đoạn 3 khi có tác vụ AI"
+          title="Dừng khẩn cấp: kích hoạt ở Sprint 4 cùng Structured Task. Muốn dừng một câu trả lời đang chạy, bấm Dừng trong khung chat."
           className="rounded-md border border-danger px-2 py-1 text-xs text-danger opacity-60"
         >
           Dừng khẩn cấp
@@ -83,23 +87,36 @@ export function Shell({ me, children }: { me: MeResponse; children: React.ReactN
       {/* Khu giữa + sidebar phải */}
       <div className="flex min-h-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
-        {chatOpen && (
-          <aside className="w-80 border-l border-line bg-panel p-4 text-sm max-lg:hidden" aria-label="AI Chat">
+        {!hideChat && canChat && chatOpen && (
+          <aside className="flex w-80 flex-col border-l border-line bg-panel p-4 text-sm max-lg:hidden" aria-label="AI Chat">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-medium">AI Chat</span>
-              <button onClick={() => setChatOpen(false)} className="text-xs text-muted">
-                Thu gọn
-              </button>
+              <span className="flex gap-3">
+                <button onClick={() => setSideKey((k) => k + 1)} className="text-xs text-muted" title="Bắt đầu cuộc trò chuyện mới">
+                  Mới
+                </button>
+                <Link href="/chat" className="text-xs text-muted">
+                  Mở rộng
+                </Link>
+                <button onClick={() => setChatOpen(false)} className="text-xs text-muted">
+                  Thu gọn
+                </button>
+              </span>
             </div>
-            <p className="text-muted">Chưa kích hoạt. AI Chat được xây ở Giai đoạn 3 sau khi bạn thêm API key vào Secret Vault.</p>
+            <ChatPanel key={sideKey} conversationId={null} compact />
           </aside>
+        )}
+        {!hideChat && canChat && !chatOpen && (
+          <button onClick={() => setChatOpen(true)} className="border-l border-line bg-panel px-2 text-xs text-muted max-lg:hidden" title="Mở AI Chat">
+            AI
+          </button>
         )}
       </div>
 
       {/* Drawer dưới */}
       <section className="overflow-y-auto border-t border-line bg-panel p-3 text-xs text-muted max-md:hidden" aria-label="Công việc đang chạy">
         <div className="mb-1 font-medium text-ink">Công việc đang chạy</div>
-        Không có công việc nào. Hàng đợi và tiến độ thời gian thực bật ở Giai đoạn 3.
+        Không có công việc nào. Giao việc có phê duyệt và tiến độ thời gian thực bật ở Sprint 4.
       </section>
     </div>
   );

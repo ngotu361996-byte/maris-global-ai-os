@@ -8,7 +8,7 @@ Trạng thái hiện tại: xem [PROJECT_STATUS.md](PROJECT_STATUS.md).
 ## Cấu trúc
 
 ```
-apps/api          NestJS API (/api/v1): auth, MFA, tenant, RBAC, thành viên, Secret Vault, audit, outbox
+apps/api          NestJS API (/api/v1): auth, MFA, tenant, RBAC, thành viên, Secret Vault, audit, outbox, AI Gateway, AI Chat
 apps/web          Next.js: giao diện Command Center 5 vùng
 packages/contracts  Schema Zod + kiểu dữ liệu dùng chung cho API và web
 packages/db       Migration SQL (nguồn chuẩn cho DDL + RLS), schema Drizzle, UUIDv7
@@ -42,6 +42,17 @@ pnpm dev
 ```
 
 Mở http://localhost:3000, chọn **Khởi tạo chủ hệ thống** để tạo tài khoản Owner và Tenant đầu tiên (chỉ làm được một lần).
+
+### Bật AI Chat
+
+1. **Secret Vault**: lưu key, ví dụ `openai.api_key`.
+2. **AI Provider**: Thêm AI, chọn loại (OpenAI, Claude, Gemini, Ollama hoặc tương thích OpenAI), chọn key, nhập tạm một model,
+   bấm **Thêm AI**, rồi **Chọn model** để lấy danh sách model thật và **Thử** để kiểm tra kết nối.
+3. Sắp thứ tự bằng ▲▼: AI trên cùng là AI chính, các AI sau là dự phòng.
+4. Vào **Chat AI** hoặc khung AI Chat bên phải.
+
+Base URL của AI Provider phải là https tới địa chỉ công khai (chống SSRF). Ngoại lệ: Ollama trên chính máy này (`http://localhost:11434/v1`).
+Gateway tự host trong mạng nội bộ cần `AI_ALLOW_PRIVATE_URLS=true` trong `.env`.
 
 ## Kiểm thử
 

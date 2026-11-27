@@ -4,6 +4,7 @@ import {
   customType,
   integer,
   jsonb,
+  numeric,
   pgSchema,
   primaryKey,
   text,
@@ -143,4 +144,71 @@ export const outboxEvents = work.table('outbox_events', {
   createdAt: ts('created_at').notNull().defaultNow(),
   publishedAt: ts('published_at'),
   attempts: integer('attempts').notNull().default(0),
+});
+
+export const ai = pgSchema('ai');
+
+// numeric columns come back as strings from postgres.js; the API converts them.
+export const aiProviders = ai.table('providers', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  kind: text('kind').$type<'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openai_compatible'>().notNull(),
+  baseUrl: text('base_url'),
+  secretRef: text('secret_ref'),
+  defaultModel: text('default_model').notNull(),
+  priority: integer('priority').notNull().default(100),
+  enabled: boolean('enabled').notNull().default(true),
+  timeoutMs: integer('timeout_ms').notNull().default(60000),
+  inputCostPerMtok: numeric('input_cost_per_mtok', { precision: 12, scale: 6 }),
+  outputCostPerMtok: numeric('output_cost_per_mtok', { precision: 12, scale: 6 }),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const aiConversations = ai.table('conversations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  title: text('title').notNull(),
+  providerId: uuid('provider_id'),
+  model: text('model'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const aiMessages = ai.table('messages', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  userId: uuid('user_id').notNull(),
+  conversationId: uuid('conversation_id').notNull(),
+  role: text('role').$type<'user' | 'assistant'>().notNull(),
+  content: text('content').notNull().default(''),
+  status: text('status').$type<'streaming' | 'complete' | 'error' | 'cancelled'>().notNull().default('complete'),
+  providerId: uuid('provider_id'),
+  model: text('model'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
+  latencyMs: integer('latency_ms'),
+  errorCode: text('error_code'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const aiProviderCalls = ai.table('provider_calls', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  messageId: uuid('message_id'),
+  providerId: uuid('provider_id').notNull(),
+  model: text('model').notNull(),
+  outcome: text('outcome').$type<'ok' | 'error' | 'timeout' | 'circuit_open' | 'cancelled'>().notNull(),
+  errorCode: text('error_code'),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
+  latencyMs: integer('latency_ms'),
+  createdAt: ts('created_at').notNull().defaultNow(),
 });
