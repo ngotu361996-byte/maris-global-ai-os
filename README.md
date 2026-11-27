@@ -18,20 +18,26 @@ docs/             Kiến trúc, ADR
 
 ## Chạy trên Windows (Development)
 
-Cần: Git, Node 22, pnpm 10 (`corepack enable`), Docker Desktop.
+Cần: Git, Node 22 trở lên, Docker Desktop (đang chạy). Cài nhanh bằng PowerShell quyền admin:
+`winget install -e --id Git.Git; winget install -e --id OpenJS.NodeJS.LTS; winget install -e --id Docker.DockerDesktop`, rồi khởi động lại máy.
 
-> Đặt repo **ngoài OneDrive**, ví dụ `C:\dev\maris-global-ai-os`. OneDrive đồng bộ làm hỏng `.git` và `node_modules`.
+> Dùng **Windows PowerShell**, không dùng Command Prompt. Đặt repo **ngoài OneDrive**, ví dụ `C:\dev\maris-global-ai-os`. OneDrive đồng bộ làm hỏng `.git` và `node_modules`.
 
 ```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+npm install -g pnpm@10.28.0          # Node 25+ không còn kèm corepack
 git clone https://github.com/ngotu361996-byte/maris-global-ai-os C:\dev\maris-global-ai-os
 cd C:\dev\maris-global-ai-os
-copy .env.example .env
-# Chạy lệnh này 2 lần, dán 2 khóa khác nhau vào MFA_ENCRYPTION_KEY và VAULT_MASTER_KEY trong .env:
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+# Tạo .env với 2 khóa ngẫu nhiên. Sao lưu file .env: mất VAULT_MASTER_KEY là mất mọi secret.
+$k1 = node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+$k2 = node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+(Get-Content .env.example) -replace '^MFA_ENCRYPTION_KEY=$', "MFA_ENCRYPTION_KEY=$k1" -replace '^VAULT_MASTER_KEY=$', "VAULT_MASTER_KEY=$k2" | Set-Content .env
+
 docker compose up -d
 pnpm install
 pnpm build
-$env:DATABASE_ADMIN_URL="postgres://maris:maris_dev@localhost:5432/maris"; pnpm db:migrate
+pnpm db:migrate
 pnpm dev
 ```
 
