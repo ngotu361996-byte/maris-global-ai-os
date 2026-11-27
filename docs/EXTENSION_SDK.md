@@ -39,9 +39,9 @@ MARIS từ chối Plugin xin thiếu quyền, và cả Plugin xin quyền không
 ### Bài kiểm tra
 
 ```json
-{ "kind": "skill", "name": "Đủ ô nhập", "key": "tra-loi-danh-gia", "inputs": { "khach_hang": "Lan" } }
+{ "kind": "skill", "name": "Đủ ô nhập", "key": "plugin-tra-loi-danh-gia", "inputs": { "khach_hang": "Lan" } }
 { "kind": "connector", "name": "Dựng được yêu cầu", "key": "kho-danh-gia", "capability": "danh_gia_moi", "inputs": { "shop": "a" } }
-{ "kind": "workflow", "name": "Chạy hết", "key": "xu-ly-danh-gia", "inputs": { "khach_hang": "Minh" } }
+{ "kind": "workflow", "name": "Chạy hết", "key": "plugin-xu-ly-danh-gia", "inputs": { "khach_hang": "Minh" } }
 ```
 
 Bài kiểm tra chạy trên máy chủ MARIS khi cài và khi bật. Chúng không gọi AI, không gọi ra ngoài và không tốn tiền:

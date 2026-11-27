@@ -115,8 +115,8 @@ describe('Sprint 12 (e2e): Plugin Center and Extension SDK', () => {
     });
     expect(p.checksum).toBe(definePlugin(sample()).checksum);
     expect(p.components.map((c: any) => [c.kind, c.key, c.status])).toEqual([
-      ['skill', 'tra-loi-danh-gia', 'paused'],
-      ['workflow', 'xu-ly-danh-gia', 'paused'],
+      ['skill', 'plugin-tra-loi-danh-gia', 'paused'],
+      ['workflow', 'plugin-xu-ly-danh-gia', 'paused'],
     ]);
     expect(p.tests.every((t: any) => t.ok)).toBe(true);
     expect(p.checks.find((c: any) => c.key === 'signature').ok).toBe(false);
@@ -144,7 +144,7 @@ describe('Sprint 12 (e2e): Plugin Center and Extension SDK', () => {
 
     // The installed skill and workflow work like any other.
     const skills = (await http.get('/api/v1/ai/skills').set(as(token)).expect(200)).body;
-    expect(skills.find((s: any) => s.key === 'tra-loi-danh-gia').status).toBe('active');
+    expect(skills.find((s: any) => s.key === 'plugin-tra-loi-danh-gia').status).toBe('active');
 
     const sql = admin();
     const logs = await sql`SELECT action, metadata FROM security.audit_logs
@@ -198,9 +198,9 @@ describe('Sprint 12 (e2e): Plugin Center and Extension SDK', () => {
       signatureStatus: 'untrusted',
     });
     expect(up.components.map((c: any) => [c.key, c.status])).toEqual([
-      ['tra-loi-danh-gia', 'paused'],
+      ['plugin-tra-loi-danh-gia', 'paused'],
       ['kho-danh-gia', 'draft'],
-      ['xu-ly-danh-gia', 'paused'],
+      ['plugin-xu-ly-danh-gia', 'paused'],
     ]);
 
     const pub = {
@@ -256,7 +256,10 @@ describe('Sprint 12 (e2e): Plugin Center and Extension SDK', () => {
         .expect(200)
     ).body;
     expect(back.version).toBe('1.0.0');
-    expect(back.components.map((c: any) => c.key)).toEqual(['tra-loi-danh-gia', 'xu-ly-danh-gia']);
+    expect(back.components.map((c: any) => c.key)).toEqual([
+      'plugin-tra-loi-danh-gia',
+      'plugin-xu-ly-danh-gia',
+    ]);
     const connectors = (await http.get('/api/v1/connectors').set(as(token)).expect(200)).body;
     expect(connectors.some((c: any) => c.key === 'kho-danh-gia')).toBe(false);
 
@@ -308,7 +311,7 @@ describe('Sprint 12 (e2e): Plugin Center and Extension SDK', () => {
     await http.delete(`${api}/${pluginId}`).set(as(token)).expect(204);
     await http.get(`${api}/${pluginId}`).set(as(token)).expect(404);
     const skills = (await http.get('/api/v1/ai/skills').set(as(token)).expect(200)).body;
-    expect(skills.some((s: any) => s.key === 'tra-loi-danh-gia')).toBe(false);
+    expect(skills.some((s: any) => s.key === 'plugin-tra-loi-danh-gia')).toBe(false);
 
     // Removed, so the same file installs fresh.
     await http.post(api).set(as(token)).send({ manifest: sample() }).expect(201);
