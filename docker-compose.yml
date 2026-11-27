@@ -17,8 +17,13 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+  # Object storage is not used yet (planned for a later phase). It is behind a
+  # profile so `docker compose up -d` starts only what MARIS needs today, and a
+  # failed MinIO image pull cannot block Postgres and Redis.
+  # Start it explicitly with: docker compose --profile storage up -d
   minio:
     image: minio/minio:latest
+    profiles: ["storage"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: maris
