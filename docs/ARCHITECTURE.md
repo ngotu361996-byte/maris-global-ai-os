@@ -83,9 +83,15 @@ riêng từ chối địa chỉ nội bộ lúc kết nối, không theo redirec
 xếp lại hàng đợi. Webhook vào (`workflows/webhook-intake.ts`) không có phiên đăng nhập: mã `X-Maris-Token` so khớp SHA-256
 bằng `timingSafeEqual`, rồi `WorkflowRunsService.start` chạy dưới tên người đã kích hoạt Connector.
 
+Plugin (`apps/api/src/plugins`, Giai đoạn 4): một tệp `maris.plugin/v1` gói Skill, Connector và Workflow. `PluginsService.installIn`
+chạy trong **một** transaction: kiểm tra checksum và chữ ký bằng `@maris/sdk`, chạy bài kiểm tra (`plugin-tests.ts`, hàm thuần dùng
+`checkInputs`, `buildRequest`, `simulate`), rồi gọi `importIn` của từng service (cùng kiểm tra như khi nhập tệp lẻ) và ghi
+`ext.plugin_components`. Kích hoạt gọi `setStatusIn`/`activateIn` của từng thành phần. Plugin không có mã chạy, nên không cần
+sandbox; Plugin chạy mã sẽ đợi Giai đoạn 5. `packages/sdk` dùng chung cho API và người làm Plugin (lệnh `pnpm ext`).
+
 ## Dữ liệu
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `maris_ctx` (hàm ngữ cảnh).
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

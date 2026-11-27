@@ -1,0 +1,20 @@
+{
+  "name": "@maris/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MARIS Extension SDK: build, check and sign plugin files.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/sdk.test.js"
+  },
+  "dependencies": {
+    "@maris/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "22.20.7"
+  }
+}

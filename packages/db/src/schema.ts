@@ -648,3 +648,65 @@ export const webhookEvents = integration.table('webhook_events', {
   workflowRunId: uuid('workflow_run_id'),
   receivedAt: ts('received_at').notNull().defaultNow(),
 });
+
+export const ext = pgSchema('ext');
+
+export type PluginSignatureStatus = 'trusted' | 'untrusted' | 'unsigned';
+export type PluginComponentKind = 'skill' | 'connector' | 'workflow';
+
+/** The installed manifest; its shape is validated by the API (contracts `plugins.ts`). */
+export const plugins = ext.table('plugins', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  name: text('name').notNull(),
+  version: text('version').notNull(),
+  description: text('description').notNull().default(''),
+  author: text('author').notNull(),
+  status: text('status')
+    .$type<'installed' | 'active' | 'paused' | 'revoked'>()
+    .notNull()
+    .default('installed'),
+  manifest: jsonb('manifest').$type<Record<string, unknown>>().notNull(),
+  checksum: text('checksum').notNull(),
+  signatureStatus: text('signature_status').$type<PluginSignatureStatus>().notNull(),
+  signerKeyId: text('signer_key_id'),
+  installedBy: uuid('installed_by').notNull(),
+  activatedBy: uuid('activated_by'),
+  activatedAt: ts('activated_at'),
+  revokedReason: text('revoked_reason'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const pluginVersions = ext.table('plugin_versions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  pluginId: uuid('plugin_id').notNull(),
+  version: text('version').notNull(),
+  manifest: jsonb('manifest').$type<Record<string, unknown>>().notNull(),
+  checksum: text('checksum').notNull(),
+  signatureStatus: text('signature_status').$type<PluginSignatureStatus>().notNull(),
+  installedBy: uuid('installed_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const pluginComponents = ext.table('plugin_components', {
+  tenantId: uuid('tenant_id').notNull(),
+  pluginId: uuid('plugin_id').notNull(),
+  kind: text('kind').$type<PluginComponentKind>().notNull(),
+  key: text('key').notNull(),
+  componentId: uuid('component_id').notNull(),
+});
+
+export const trustedPublishers = ext.table('trusted_publishers', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  keyId: text('key_id').notNull(),
+  name: text('name').notNull(),
+  publicKey: text('public_key').notNull(),
+  addedBy: uuid('added_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  revokedAt: ts('revoked_at'),
+});

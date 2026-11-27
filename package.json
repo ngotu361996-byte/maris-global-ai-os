@@ -12,7 +12,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:migrate": "pnpm --filter @maris/db migrate",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "ext": "node packages/sdk/dist/cli.js"
   },
   "devDependencies": {
     "@types/node": "22.20.7",

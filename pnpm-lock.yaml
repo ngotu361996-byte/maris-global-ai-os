@@ -32,6 +32,9 @@ importers:
       '@maris/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@maris/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@nestjs/common':
         specifier: 11.2.12
         version: 11.2.12(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -149,6 +152,19 @@ importers:
       postgres:
         specifier: 3.4.9
         version: 3.4.9
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.7
+        version: 22.20.7
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/sdk:
+    dependencies:
+      '@maris/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: 22.20.7
