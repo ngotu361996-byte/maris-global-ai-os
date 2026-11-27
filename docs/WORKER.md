@@ -36,6 +36,8 @@ Worker chỉ làm các loại việc có sẵn trong chương trình, không ch�
 | Kiểm tra máy | Báo cáo hệ điều hành, CPU, RAM, ổ đĩa, GPU, Node.js, Ollama và độ trễ tới MARIS |
 | AI cục bộ (Ollama) | Chạy model trên Ollama của chính máy đó (`127.0.0.1:11434`). Cần cài Ollama và tải model, ví dụ `ollama pull llama3.2`. Worker tự nhận ra trong vòng 5 phút |
 | Việc thử | Đếm giây và báo tiến độ, để thử phân việc, hủy và chuyển máy |
+| Xử lý ảnh | Đổi cỡ, gắn logo, chỉnh ảnh cho ảnh trong Kho nội dung gốc (thư viện sharp, có sẵn) |
+| Xử lý video | Cắt đoạn, đổi tỉ lệ khung hình, gắn logo, giảm nhiễu, tăng nét, lồng giọng đọc, làm ảnh bìa. Cần FFmpeg: trên Windows chạy `winget install --id Gyan.FFmpeg -e` rồi mở lại cửa sổ (hoặc đặt `FFMPEG_PATH` tới `ffmpeg.exe`) |
 | Chạy mã trong sandbox | Chạy Python hoặc Node.js trong container Docker cách ly. Chỉ trên máy Code Runner có `--allow-code` (xem bên dưới) |
 
 Giao việc ở **Hạ tầng → Việc của Worker**. Máy nhận việc khi đang hoạt động, còn chỗ trống, RAM và ổ đĩa chưa đầy. Máy tắt hay mất mạng quá 60 giây thì việc tự chuyển sang máy khác, tối đa 3 lần. Bấm Ctrl+C khi đang chạy việc thì việc cũng được trả về hàng đợi.

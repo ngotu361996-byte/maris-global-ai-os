@@ -63,6 +63,12 @@ export class FakeAi {
       return;
     }
 
+    if (path.endsWith('/audio/speech')) {
+      // OpenAI text-to-speech: a few bytes that start like an MP3 file.
+      res.setHeader('content-type', 'audio/mpeg');
+      res.end(Buffer.concat([Buffer.from('ID3\x04\x00\x00\x00\x00\x00\x00', 'latin1'), Buffer.from(String(this.requests.at(-1)!.body?.voice ?? ''))]));
+      return;
+    }
     res.setHeader('content-type', 'text/event-stream');
     const send = (data: unknown, event?: string) =>
       res.write(`${event ? `event: ${event}\n` : ''}data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`);

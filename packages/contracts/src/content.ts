@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { workerJobInputSchemas, type ImagePreset, type WorkerJobStatus } from './worker-jobs';
+import {
+  endAfterStart,
+  mediaVideoObject,
+  workerJobInputSchemas,
+  type ImagePreset,
+  type WorkerJobStatus,
+} from './worker-jobs';
 
 /**
  * Content libraries (spec Part 11): the source library (M09) keeps original files, product facts and
@@ -547,25 +553,104 @@ export const processImageSchema = workerJobInputSchemas['media.image']
   });
 export type ProcessImage = z.input<typeof processImageSchema>;
 
+export const processVideoSchema = mediaVideoObject
+  .omit({ assetId: true, voiceVersion: true })
+  .extend({
+    /** Only this worker; null lets any worker that can process video take it. */
+    targetDeviceId: z.uuid().nullable().default(null),
+  })
+  .refine(endAfterStart, {
+    message: 'Thời điểm kết thúc phải sau thời điểm bắt đầu',
+    path: ['endSec'],
+  });
+export type ProcessVideo = z.input<typeof processVideoSchema>;
+
 export interface MediaJobResponse {
   id: string;
+  kind: 'media.image' | 'media.video';
   title: string;
   status: WorkerJobStatus;
   progress: number;
   progressNote: string | null;
   presets: ImagePreset[];
   logoAssetId: string | null;
+  /** Video jobs: the voice-over laid over the video. */
+  voiceItemId: string | null;
   deviceName: string | null;
   errorMessage: string | null;
   cancelRequested: boolean;
   createdByName: string;
   createdAt: string;
   finishedAt: string | null;
-  outputs: { preset: ImagePreset; itemId: string; title: string; status: ItemStatus }[];
+  outputs: {
+    /** A size, or 'cover' for a video job's cover picture. */
+    preset: ImagePreset | 'cover';
+    kind: 'image' | 'video';
+    itemId: string;
+    title: string;
+    status: ItemStatus;
+  }[];
 }
 
 export interface MediaJobsResponse {
   jobs: MediaJobResponse[];
-  /** Workers that say they can process images now. */
+  /** Workers that say they can do this kind of job now. */
   workers: { id: string; name: string; online: boolean }[];
+}
+
+// ------------------------------------------------------------------------------- voice-over
+
+/**
+ * AI voice-over (spec Part 12): a text item's current version is read aloud by a cloud voice and
+ * saved as a new audio item, which is approved like any other content before it is used. Vietnamese
+ * voice-overs alternate between a lively female and a confident young male voice when the voice is
+ * left on auto, so a channel does not use one voice for everything.
+ */
+export const VOICES = ['nova', 'coral', 'shimmer', 'onyx', 'ash', 'echo'] as const;
+export type Voice = (typeof VOICES)[number];
+export const VOICE_INFO: Record<Voice, { label: string; gender: 'female' | 'male' }> = {
+  nova: { label: 'Nova (nữ, sôi nổi)', gender: 'female' },
+  coral: { label: 'Coral (nữ, ấm áp)', gender: 'female' },
+  shimmer: { label: 'Shimmer (nữ, nhẹ nhàng)', gender: 'female' },
+  onyx: { label: 'Onyx (nam, trầm chắc)', gender: 'male' },
+  ash: { label: 'Ash (nam trẻ, tự tin)', gender: 'male' },
+  echo: { label: 'Echo (nam, rõ ràng)', gender: 'male' },
+};
+/** Takes turns between female and male voices. */
+export const VOICE_AUTO = 'auto';
+/** The order auto takes voices in: female and male in turn. */
+export const VOICE_ROTATION: readonly Voice[] = ['nova', 'ash', 'coral', 'onyx', 'shimmer', 'echo'];
+export const VOICEOVER_LIMITS = {
+  /** Longest text one voice-over reads, in characters (the provider's own limit). */
+  maxChars: 4096,
+  /** Price used to record what a voice-over cost, in USD per million characters. */
+  usdPerMillionChars: 15,
+  model: 'gpt-4o-mini-tts',
+  timeoutSec: 180,
+} as const;
+/** How each language sounds when no style is given. */
+export const VOICE_DEFAULT_STYLE: Record<'vi' | 'en', string> = {
+  vi: 'Đọc bằng tiếng Việt giọng chuẩn, tự nhiên, rõ ràng và cuốn hút như người dẫn chương trình bán hàng. Ngắt nghỉ đúng dấu câu.',
+  en: 'Speak in natural, friendly American English, like a confident presenter. Clear and warm, not robotic.',
+};
+
+export const voiceoverSchema = z
+  .object({
+    voice: z.union([z.literal(VOICE_AUTO), z.enum(VOICES)]).default(VOICE_AUTO),
+    /** 0.5 is half speed, 2 is twice as fast. */
+    speed: z.number().min(0.5).max(2).default(1),
+    /** How to read it (giọng, cảm xúc, nhịp); empty uses the language's default. */
+    style: z.string().trim().max(300).nullable().default(null),
+    title: z.string().trim().min(1).max(200).nullable().default(null),
+  })
+  .strict();
+export type VoiceoverInput = z.input<typeof voiceoverSchema>;
+
+export interface VoiceoverResponse {
+  itemId: string;
+  title: string;
+  voice: Voice;
+  speed: number;
+  chars: number;
+  costUsd: number;
 }

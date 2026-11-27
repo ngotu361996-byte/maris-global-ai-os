@@ -236,12 +236,14 @@ describe('Sprint 18 (e2e): image processing on a Media Worker', () => {
     expect(list.jobs[0].outputs).toEqual([
       {
         preset: 'feed_square',
+        kind: 'image',
         itemId: square.itemId,
         title: 'Áo thun trắng · Vuông 1:1',
         status: 'approved',
       },
       {
         preset: 'thumbnail',
+        kind: 'image',
         itemId: thumb.itemId,
         title: 'Áo thun trắng · Thumbnail',
         status: 'draft',

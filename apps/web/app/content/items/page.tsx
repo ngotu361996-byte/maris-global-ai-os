@@ -25,6 +25,7 @@ import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
 import { AiWriter } from './AiWriter';
+import { VoiceOver } from './VoiceOver';
 
 const STATUS_CLS: Record<ItemStatus, string> = {
   draft: 'border-line text-muted',
@@ -558,6 +559,17 @@ function ItemsPage() {
               onError={fail}
             />
           )}
+          {(detail.kind === 'text' || detail.kind === 'ad' || detail.kind === 'other') && (
+            <VoiceOver
+              detail={detail}
+              onMade={(id, msg) =>
+                api<ItemDetailResponse>(`/content/items/${id}`)
+                  .then((d) => done(d, msg))
+                  .catch(fail)
+              }
+              onError={fail}
+            />
+          )}
           {detail.reviewNote && (
             <p className="mb-3 text-sm">
               <span className="text-muted">Ghi chú duyệt ({detail.reviewedByName}):</span>{' '}
@@ -590,7 +602,7 @@ function ItemsPage() {
                 rows={4}
                 maxLength={200000}
                 defaultValue={detail.versions[0]?.body ?? ''}
-                key={detail.currentVersion}
+                key={`${detail.id}-${detail.currentVersion}`}
                 className={inputCls}
               />
               <div className="flex flex-wrap items-center gap-3 text-sm">

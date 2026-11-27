@@ -1,3 +1,7 @@
+import { createReadStream, createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type {
   ClaimJobResponse,
   FinishJob,
@@ -9,6 +13,9 @@ import type {
   HeartbeatResponse,
   PairDeviceResponse,
 } from '@maris/contracts';
+
+/** Longest a video download or upload may take. */
+const DOWNLOAD_MAX_MS = 60 * 60 * 1000;
 
 export class ServerError extends Error {
   constructor(
@@ -150,6 +157,70 @@ export async function uploadJobOutput(
       body: new Uint8Array(data),
       signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
     },
+  );
+  if (!res.ok) return fail(res);
+  return (await res.json()) as MediaOutputResponse;
+}
+
+/** Saves a (large) file of a job this worker runs to disk, refusing anything over maxBytes. */
+export async function downloadJobFileTo(
+  server: string,
+  token: string,
+  jobId: string,
+  what: { assetId: string } | { itemId: string },
+  dest: string,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<number> {
+  const path = 'assetId' in what ? `files/${what.assetId}` : `items/${what.itemId}`;
+  const res = await fetch(`${server}/agent/jobs/${jobId}/${path}`, {
+    headers: { 'X-Maris-Device': token },
+    signal: AbortSignal.any([signal, AbortSignal.timeout(DOWNLOAD_MAX_MS)]),
+  });
+  if (!res.ok) return fail(res);
+  if (Number(res.headers.get('content-length') ?? 0) > maxBytes)
+    throw new ServerError(413, 'FILE_TOO_LARGE', 'Tệp quá lớn');
+  let size = 0;
+  const limit = new Transform({
+    transform(chunk: Buffer, _enc, done) {
+      size += chunk.length;
+      if (size > maxBytes) done(new ServerError(413, 'FILE_TOO_LARGE', 'Tệp quá lớn'));
+      else done(null, chunk);
+    },
+  });
+  await pipeline(
+    Readable.fromWeb(res.body as import('node:stream/web').ReadableStream),
+    limit,
+    createWriteStream(dest),
+  );
+  return size;
+}
+
+/** Sends one output file of a job from disk; sending the same preset again is safe. */
+export async function uploadJobOutputFile(
+  server: string,
+  token: string,
+  jobId: string,
+  preset: string,
+  fileName: string,
+  file: string,
+  signal: AbortSignal,
+): Promise<MediaOutputResponse> {
+  const { size } = await stat(file);
+  const res = await fetch(
+    `${server}/agent/jobs/${jobId}/outputs?preset=${encodeURIComponent(preset)}`,
+    {
+      method: 'POST',
+      headers: {
+        'X-Maris-Device': token,
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(size),
+        'X-File-Name': encodeURIComponent(fileName),
+      },
+      body: Readable.toWeb(createReadStream(file)) as unknown as RequestInit['body'],
+      duplex: 'half',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(DOWNLOAD_MAX_MS)]),
+    } as RequestInit,
   );
   if (!res.ok) return fail(res);
   return (await res.json()) as MediaOutputResponse;

@@ -132,6 +132,15 @@ kết quả lên `agent/jobs/:id/outputs`. Máy chủ nhận dạng lại tệp,
 có `worker_job_id`, ghi `content.media_outputs` (duy nhất theo việc và cỡ ảnh) và audit, với người tạo việc là người thực
 hiện.
 
+Xử lý video (Sprint 19) đi cùng đường đó với việc `media.video`: Worker (`apps/worker/src/video.ts`) gọi FFmpeg/ffprobe
+của máy, tải tệp ra thư mục tạm theo luồng, dựng lệnh FFmpeg bằng hàm thuần `videoArgs` (không ghép chuỗi lệnh shell) và
+gửi từng video cùng ảnh bìa (`preset=cover`). Giọng đọc lồng vào là một thành phẩm âm thanh; việc ghi `voiceVersion` lúc
+giao để Worker chỉ tải đúng phiên bản đó (`agent/jobs/:id/items/:itemId`).
+
+Giọng đọc AI (Sprint 19): `ContentVoiceService` gọi `/audio/speech` của AI Provider loại OpenAI (kiểm tra địa chỉ bằng
+`url-guard`, khóa đọc từ Secret Vault, Cost Governor lọc theo ngân sách), ghi `ai.provider_calls` có `content_item_id`,
+rồi lưu tệp thành thành phẩm âm thanh chuyển thể từ mục văn bản, cùng audit trong một transaction.
+
 
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

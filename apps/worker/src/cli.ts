@@ -17,7 +17,9 @@ const HELP = `MARIS Worker ${AGENT_VERSION}
 
 Worker chỉ kết nối ra máy chủ MARIS. Nó không mở cổng và không chạy lệnh nào từ máy chủ:
 nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, xử lý ảnh,
-việc thử). Việc xử lý ảnh chỉ tải được đúng ảnh và logo của việc đó, khi máy này đang làm việc đó.
+xử lý video bằng FFmpeg, việc thử). Việc xử lý ảnh và video chỉ tải được đúng tệp, logo và giọng
+đọc của việc đó, khi máy này đang làm việc đó. Xử lý video cần FFmpeg trên máy
+(Windows: winget install --id Gyan.FFmpeg -e; hoặc đặt FFMPEG_PATH tới ffmpeg.exe).
 Mã chỉ chạy khi chủ máy thêm --allow-code, và luôn chạy trong container Docker không mạng,
 không ghi được đĩa của máy, giới hạn RAM, CPU và thời gian.`;
 
@@ -68,6 +70,10 @@ async function cmdRun(args: string[]): Promise<void> {
   }
   const runner = jobsOn ? new JobRunner(c.server, c.token, say) : null;
   let caps = jobsOn ? await capabilities({ allowCode }) : [];
+  if (jobsOn && !caps.includes('media.video'))
+    say(
+      'Chưa thấy FFmpeg: máy này chưa nhận việc xử lý video. Cài bằng: winget install --id Gyan.FFmpeg -e (rồi mở lại cửa sổ).',
+    );
   let capsCheckedAt = Date.now();
   let intervalSec = HEARTBEAT_INTERVAL_SEC;
   let failures = 0;
