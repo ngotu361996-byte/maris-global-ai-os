@@ -11,6 +11,7 @@ import {
   type SecretResponse,
 } from '@maris/contracts';
 import { BudgetsPanel } from '@/components/BudgetsPanel';
+import { ModelsPanel } from '@/components/ModelsPanel';
 import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -349,6 +350,7 @@ export default function AiProvidersPage() {
         </form>
       </Panel>
 
+      <ModelsPanel providers={providers} />
       <BudgetsPanel providers={providers} />
 
       {usage && (

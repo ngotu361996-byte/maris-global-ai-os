@@ -1,12 +1,12 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 5)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 6)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
-| 3. AI Central Command | Sprint 3, 4 đã merge; Sprint 5 (Structured Task, Dừng khẩn cấp, ngân sách) đang review; Sprint 6 chưa bắt đầu |
+| 3. AI Central Command | Sprint 3, 4, 5 đã merge; Sprint 6 (Hội đồng AI, Danh mục model) đang review; còn tải tệp và giọng nói (Sprint 7) |
 | 4–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -65,8 +65,15 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 - Web: `/tasks`, nút “Giao việc” dưới câu trả lời trong chat, thanh Công việc đang chạy cập nhật mỗi 5 giây, nút Dừng khẩn cấp, ô ngân sách trên trang AI Provider
 - Giới hạn: ngân sách của một công việc được kiểm tra trước mỗi lần chạy (một lần chạy có thể vượt một chút); nếu API dừng giữa lúc duyệt và lúc đưa vào hàng đợi, công việc nằm ở “chờ chạy” cho tới khi bấm Tạm dừng rồi Chạy tiếp
 
-## Sprint 6 (dự kiến, Giai đoạn 3)
+## Sprint 6 – Danh mục model và Hội đồng AI (Giai đoạn 3)
 
-- Hội đồng AI (nhiều AI phân tích, phản biện, tổng hợp)
-- Capability/Model Registry
-- Tải hình ảnh, video, tài liệu (cần MinIO); nhập liệu bằng giọng nói
+- Migration `0006`: `ai.models`, `ai.councils`, `ai.council_turns` (chỉ INSERT), cột `council_id` cho `ai.provider_calls`
+- Model Registry và Capability Registry: mỗi model của một AI có khả năng (trò chuyện, suy luận sâu, lập trình, ngữ cảnh dài, đọc hình ảnh, nhanh, giá rẻ), giá riêng, ngữ cảnh tối đa, bật/tắt. Chế độ Lập trình và Phát triển phần mềm ưu tiên model “Lập trình”; Nghiên cứu, Chuyên gia và Giao việc ưu tiên “Suy luận sâu”. Model do người dùng hoặc Agent chọn thì giữ nguyên. Model tắt không bao giờ được dùng. Giá model thay giá AI khi tính chi phí và ngân sách
+- Hội đồng AI (`/council`): 2–4 thành viên (AI + model) trả lời độc lập song song → phản biện lẫn nhau (tùy chọn, cần ít nhất 2 câu trả lời) → một AI tổng hợp (các thành viên khác là dự phòng). Giới hạn chi phí mỗi phiên kiểm tra trước mỗi bước; hủy bởi người tạo hoặc người duyệt; Dừng khẩn cấp ngắt phiên đang họp. Bản tổng hợp tách đồng thuận và bất đồng, và ghi rõ đồng thuận không phải bằng chứng (đặc tả Phần 10)
+- Chạy trên hàng đợi BullMQ `maris-council`, cùng cờ `AI_TASK_WORKER_ENABLED`
+- Giới hạn: một bước đang chạy có thể vượt giới hạn chi phí một chút vì giới hạn được kiểm tra giữa các bước; vòng lặp tự cải tiến (Planner → Worker → Grader → …) chưa làm
+
+## Sprint 7 (dự kiến, Giai đoạn 3)
+
+- Tải hình ảnh, video, tài liệu. Máy của người dùng không tải được image `minio/minio` từ Docker Hub, nên cần lưu tệp trên ổ đĩa cục bộ trước, MinIO/S3 sau
+- Nhập liệu bằng giọng nói

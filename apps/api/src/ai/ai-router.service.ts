@@ -12,7 +12,13 @@ export type ProviderRow = typeof schema.aiProviders.$inferSelect;
 export interface Candidate {
   provider: ProviderRow;
   model: string;
+  /** The model was named by the conversation or agent; the Model Registry must not swap it. */
+  pinned?: boolean;
+  /** Prices from the Model Registry; they win over the provider's prices. */
+  price?: Pricing;
 }
+
+export type Pricing = Pick<ProviderRow, 'inputCostPerMtok' | 'outputCostPerMtok'>;
 
 export interface CallRecord {
   providerId: string;
@@ -68,7 +74,7 @@ export class AiRouterService {
     const calls: CallRecord[] = [];
     let last: ProviderError | null = null;
 
-    for (const { provider, model } of input.candidates) {
+    for (const { provider, model, price } of input.candidates) {
       if (await this.breaker.isOpen(provider.id)) {
         calls.push(record(provider.id, model, 'circuit_open', 'CIRCUIT_OPEN'));
         last = new ProviderError('UPSTREAM', `${provider.name} đang tạm ngắt do lỗi liên tiếp`);
@@ -85,7 +91,7 @@ export class AiRouterService {
             input.emit({ type: 'delta', text });
           });
           const latencyMs = Date.now() - started;
-          const costUsd = cost(provider, usage);
+          const costUsd = cost(price ?? provider, usage);
           calls.push({ ...record(provider.id, model, 'ok', null), ...usage, costUsd, latencyMs });
           await this.breaker.recordSuccess(provider.id);
           return { status: 'complete', content, provider, model, usage, costUsd, latencyMs, errorCode: null, errorMessage: null, calls };
@@ -186,7 +192,7 @@ function record(providerId: string, model: string, outcome: CallRecord['outcome'
   return { providerId, model, outcome, errorCode, inputTokens: null, outputTokens: null, costUsd: null, latencyMs: null };
 }
 
-export function cost(provider: Pick<ProviderRow, 'inputCostPerMtok' | 'outputCostPerMtok'>, usage: StreamUsage): number | null {
+export function cost(provider: Pricing, usage: StreamUsage): number | null {
   if (provider.inputCostPerMtok == null && provider.outputCostPerMtok == null) return null;
   const i = (usage.inputTokens ?? 0) * Number(provider.inputCostPerMtok ?? 0);
   const o = (usage.outputTokens ?? 0) * Number(provider.outputCostPerMtok ?? 0);

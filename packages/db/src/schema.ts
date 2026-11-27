@@ -214,6 +214,7 @@ export const aiProviderCalls = ai.table('provider_calls', {
   costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
   latencyMs: integer('latency_ms'),
   taskId: uuid('task_id'),
+  councilId: uuid('council_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 
@@ -317,4 +318,71 @@ export const aiControls = ai.table('controls', {
   reason: text('reason'),
   changedBy: uuid('changed_by').notNull(),
   changedAt: ts('changed_at').notNull().defaultNow(),
+});
+
+export const MODEL_CAPABILITY_KEYS = [
+  'chat',
+  'reasoning',
+  'coding',
+  'long_context',
+  'vision',
+  'fast',
+  'low_cost',
+] as const;
+
+export const aiModels = ai.table('models', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  providerId: uuid('provider_id').notNull(),
+  model: text('model').notNull(),
+  capabilities: text('capabilities').array().notNull(),
+  contextWindow: integer('context_window'),
+  inputCostPerMtok: numeric('input_cost_per_mtok', { precision: 12, scale: 4 }),
+  outputCostPerMtok: numeric('output_cost_per_mtok', { precision: 12, scale: 4 }),
+  enabled: boolean('enabled').notNull().default(true),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export type AiCouncilStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export interface AiCouncilMember {
+  providerId: string;
+  model: string;
+}
+
+export const aiCouncils = ai.table('councils', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  question: text('question').notNull(),
+  members: jsonb('members').$type<AiCouncilMember[]>().notNull(),
+  critique: boolean('critique').notNull().default(true),
+  maxCostUsd: numeric('max_cost_usd', { precision: 12, scale: 4 }).notNull(),
+  projectId: uuid('project_id'),
+  status: text('status').$type<AiCouncilStatus>().notNull().default('queued'),
+  stage: text('stage'),
+  synthesis: text('synthesis'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }).notNull().default('0'),
+  errorCode: text('error_code'),
+  startedAt: ts('started_at'),
+  finishedAt: ts('finished_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const aiCouncilTurns = ai.table('council_turns', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  councilId: uuid('council_id').notNull(),
+  stage: text('stage').$type<'answer' | 'critique' | 'synthesis'>().notNull(),
+  memberIndex: integer('member_index').notNull(),
+  providerId: uuid('provider_id'),
+  model: text('model'),
+  status: text('status').$type<'complete' | 'error' | 'cancelled'>().notNull(),
+  content: text('content').notNull().default(''),
+  errorCode: text('error_code'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
+  latencyMs: integer('latency_ms'),
+  createdAt: ts('created_at').notNull().defaultNow(),
 });

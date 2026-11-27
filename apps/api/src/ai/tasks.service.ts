@@ -3,7 +3,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import type Redis from 'ioredis';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
-import type { AiActivityResponse, CreateTask, TaskResponse, TaskStatus as AiTaskStatus } from '@maris/contracts';
+import { MODE_CAPABILITY, type AiActivityResponse, type CreateTask, type TaskResponse, type TaskStatus as AiTaskStatus } from '@maris/contracts';
 import { AuditService } from '../audit/audit.service';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { DbService, type Tx } from '../db/db.service';
@@ -18,6 +18,7 @@ import { orderCandidates, systemPrompt, type Ctx } from './chat.service';
 import { ControlService, estopKey, taskAbortKey } from './control.service';
 import { CostGovernorService } from './cost-governor.service';
 import { MemoryService } from './memory.service';
+import { applyRegistry, ModelsService } from './models.service';
 
 const { aiTasks, aiProviderCalls } = schema;
 type TaskRow = typeof aiTasks.$inferSelect;
@@ -55,6 +56,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     private readonly memory: MemoryService,
     private readonly control: ControlService,
     private readonly governor: CostGovernorService,
+    private readonly models: ModelsService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
@@ -225,7 +227,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const project = claimed.projectId ? await this.memory.project(tx, job.tenantId, claimed.projectId) : null;
         const memory = project ? await this.memory.promptBlock(tx, project) : null;
         const rows = (await this.providers.rows(tx, job.tenantId)).filter((p) => p.enabled);
-        const candidates = await this.governor.filter(tx, job.tenantId, orderCandidates(rows, agent?.providerId ?? null, agent?.model ?? null));
+        const ordered = orderCandidates(rows, agent?.providerId ?? null, agent?.model ?? null);
+        const registered = applyRegistry(ordered, await this.models.rows(tx, job.tenantId), MODE_CAPABILITY.expert);
+        const candidates = await this.governor.filter(tx, job.tenantId, registered);
         const messages: ChatTurn[] = [
           { role: 'system', content: systemPrompt({ mode: 'expert', agent, memory }) },
           { role: 'user', content: taskPrompt(claimed) },

@@ -1,4 +1,4 @@
-/** Chat modes from the spec (Phần 08). "Hội đồng AI" needs several AIs at once and comes with Structured Task. */
+/** Chat modes from the spec (Phần 08). "Hội đồng AI" needs several AIs at once and has its own page (/council). */
 export const CHAT_MODES = ['chat', 'research', 'command', 'expert', 'coding', 'monitor', 'software'] as const;
 export type ChatMode = (typeof CHAT_MODES)[number];
 
