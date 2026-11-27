@@ -135,7 +135,7 @@ export class AiRouterService {
       errorMessage: cancelled
         ? 'Đã hủy'
         : input.candidates.length
-          ? `Tất cả AI Provider đều lỗi${last ? ` (lỗi cuối: ${last.code})` : ''}`
+          ? `Tất cả AI Provider đều lỗi${last ? ` (lỗi cuối: ${last.code}${last.message ? `, ${last.message}` : ''})` : ''}`
           : 'Chưa có AI Provider nào được bật',
       calls,
     };

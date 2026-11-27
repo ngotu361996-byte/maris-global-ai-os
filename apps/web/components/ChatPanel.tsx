@@ -114,7 +114,7 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
             patch((m) => ({ ...ev.message, providerName: m.providerName }));
           } else if (ev.type === 'error') {
             patch((m) => ({ ...m, status: ev.code === 'CANCELLED' ? 'cancelled' : 'error', errorCode: ev.code }));
-            if (ev.code !== 'CANCELLED') setError(ERROR_TEXT[ev.code] ?? ev.message);
+            if (ev.code !== 'CANCELLED') setError(ERROR_TEXT[ev.code] ? `${ERROR_TEXT[ev.code]} Chi tiết: ${ev.message}` : ev.message);
           }
         },
         ctrl.signal,

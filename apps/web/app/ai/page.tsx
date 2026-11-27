@@ -136,8 +136,11 @@ export default function AiProvidersPage() {
         Danh sách AI mà MARIS dùng. AI đứng đầu là AI chính; khi AI chính lỗi hoặc quá thời gian, MARIS tự chuyển sang AI kế tiếp.
         Key nằm trong Secret Vault, trang này chỉ chọn key theo tên và không bao giờ hiển thị giá trị.
       </p>
-      {error && <Notice kind="error">{error}</Notice>}
-      {ok && <Notice kind="ok">{ok}</Notice>}
+      {/* Sticky so the result of a button far down the page is always visible. */}
+      <div className="sticky top-0 z-10 bg-bg">
+        {error && <Notice kind="error">{error}</Notice>}
+        {ok && <Notice kind="ok">{ok}</Notice>}
+      </div>
 
       <Panel title="Thứ tự AI (trên cùng là AI chính)">
         {providers.length === 0 ? (
