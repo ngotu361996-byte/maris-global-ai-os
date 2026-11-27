@@ -63,6 +63,14 @@ export default function AiProvidersPage() {
     const form = e.currentTarget;
     const f = new FormData(form);
     const num = (k: string) => (String(f.get(k) ?? '').trim() === '' ? null : Number(f.get(k)));
+    const model = String(f.get('defaultModel')).trim();
+    if (/^(sk-|sk_|rk-|AIza|xai-|gsk_)/.test(model) || model.length >= 120) {
+      // Never send a pasted key anywhere but the Secret Vault.
+      (form.elements.namedItem('defaultModel') as HTMLInputElement).value = '';
+      setOk(null);
+      setError('Ô “Model mặc định” đang chứa một API key. Đã xóa nó khỏi ô. Key chỉ dán vào Secret Vault; nếu key đã lộ, hãy xóa nó trên trang của nhà cung cấp và tạo key mới.');
+      return;
+    }
     await run('add', async () => {
       const created = await api<AiProviderResponse>('/ai/providers', {
         method: 'POST',
@@ -71,7 +79,7 @@ export default function AiProvidersPage() {
           name: String(f.get('name')).trim(),
           baseUrl: String(f.get('baseUrl') ?? '').trim() || null,
           secretRef: String(f.get('secretRef') ?? '') || null,
-          defaultModel: String(f.get('defaultModel')).trim(),
+          defaultModel: model,
           inputCostPerMtok: num('inputCost'),
           outputCostPerMtok: num('outputCost'),
         }),

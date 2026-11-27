@@ -12,6 +12,15 @@ export const AI_PROVIDER_PRESETS: Record<AiProviderKind, { label: string; defaul
   openai_compatible: { label: 'Tương thích OpenAI (OpenRouter, DeepSeek, Qwen, Grok…)', needsKey: true },
 };
 
+/** A model name, never a key: catches a key pasted into the model box before it is stored in plain text. */
+const modelName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/, 'tên model chỉ gồm chữ, số và . _ : / @ + -')
+  .refine((v) => !/^(sk-|sk_|rk-|AIza|xai-|gsk_)/.test(v) && v.length < 120, 'đây giống API key, không phải tên model. Key chỉ dán vào Secret Vault');
+
 const secretRef = z.string().regex(/^secret:\/\/[0-9a-f-]{36}$/, 'phải là mã secret://… từ Secret Vault');
 const cost = z.number().min(0).max(100_000).nullable();
 
@@ -19,7 +28,7 @@ const providerFields = {
   name: z.string().trim().min(1).max(80),
   baseUrl: z.string().url().max(500).nullable(),
   secretRef: secretRef.nullable(),
-  defaultModel: z.string().trim().min(1).max(200),
+  defaultModel: modelName,
   enabled: z.boolean(),
   timeoutMs: z.number().int().min(1000).max(600_000),
   inputCostPerMtok: cost,
@@ -86,7 +95,7 @@ export interface AiProviderTestResult {
 export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   providerId: z.string().uuid().nullable().optional(),
-  model: z.string().trim().min(1).max(200).nullable().optional(),
+  model: modelName.nullable().optional(),
 });
 export type CreateConversation = z.infer<typeof createConversationSchema>;
 
@@ -94,7 +103,7 @@ export const updateConversationSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     providerId: z.string().uuid().nullable(),
-    model: z.string().trim().min(1).max(200).nullable(),
+    model: modelName.nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'không có gì để cập nhật');
@@ -104,7 +113,7 @@ export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
   /** Overrides the conversation's provider/model for this message and later ones. */
   providerId: z.string().uuid().nullable().optional(),
-  model: z.string().trim().min(1).max(200).nullable().optional(),
+  model: modelName.nullable().optional(),
 });
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 
