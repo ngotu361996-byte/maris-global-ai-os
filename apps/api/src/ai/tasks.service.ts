@@ -45,6 +45,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private queue?: Queue;
   private worker?: Worker;
   private connections: Redis[] = [];
+  /** Told when a task ends or stops, so a workflow waiting on it can move on. */
+  private readonly finishedListeners: ((tenantId: string, taskId: string) => Promise<void>)[] = [];
 
   constructor(
     private readonly db: DbService,
@@ -114,7 +116,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return this.db.withContext(ctx, async (tx) => taskResponse(await this.insert(tx, ctx, body)));
   }
 
-  /** Creates a pending task. Also used by AI Central Command for the steps of an accepted plan. */
+  onFinished(listener: (tenantId: string, taskId: string) => Promise<void>): void {
+    this.finishedListeners.push(listener);
+  }
+
+  private async notifyFinished(tenantId: string, taskId: string): Promise<void> {
+    for (const l of this.finishedListeners) await l(tenantId, taskId).catch((e: Error) => this.logger.error(`finished listener: ${e.message}`));
+  }
+
+  /**
+   * Creates a pending task. Also used by AI Central Command for the steps of an accepted plan, and
+   * by workflows, whose tasks arrive already approved by the person who started the run.
+   */
   async insert(tx: Tx, ctx: Ctx, body: CreateTask & TaskOrigin): Promise<TaskRow> {
     const requiredLevel = body.requiredLevel ?? 'prepare';
     if (body.agentId) assertLevel(await this.agents.get(tx, ctx.tenantId, body.agentId), requiredLevel);
@@ -139,11 +152,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         requiredLevel,
         skillId: body.skill?.id ?? null,
         skillVersion: body.skill?.version ?? null,
-        skillPrompt: body.skill?.prompt ?? null,
-        timeoutSec: body.skill?.timeoutSec ?? null,
+        skillPrompt: body.skill?.prompt ?? body.workflow?.prompt ?? null,
+        timeoutSec: body.skill?.timeoutSec ?? body.timeoutSec ?? null,
+        workflowRunId: body.workflow?.runId ?? null,
+        workflowNodeId: body.workflow?.nodeId ?? null,
+        ...(body.approvedBy
+          ? { status: 'queued' as const, approvedBy: body.approvedBy, approvedAt: new Date(), progress: 'Đã duyệt khi bắt đầu Workflow, đang chờ chạy' }
+          : {}),
       })
       .returning();
-    await this.log(tx, ctx, 'ai.task.created', row!.id, { budgetUsd: body.budgetUsd, requiredLevel, planId: body.planId ?? null, skillId: body.skill?.id ?? null });
+    await this.log(tx, ctx, 'ai.task.created', row!.id, {
+      budgetUsd: body.budgetUsd,
+      requiredLevel,
+      planId: body.planId ?? null,
+      skillId: body.skill?.id ?? null,
+      workflowRunId: body.workflow?.runId ?? null,
+    });
     await this.outbox.enqueue(tx, { tenantId: ctx.tenantId, type: 'ai.task.created', payload: { taskId: row!.id } });
     return row!;
   }
@@ -214,11 +238,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       return r;
     });
     await this.redis.client.set(taskAbortKey(id), '1', 'EX', 3600);
+    await this.notifyFinished(ctx.tenantId, id);
     return taskResponse(row);
+  }
+
+  /** Cancels an open task inside the caller's transaction; call abort() after it commits. */
+  async cancelInTx(tx: Tx, tenantId: string, id: string): Promise<boolean> {
+    const current = await this.row(tx, tenantId, id);
+    if (!OPEN.includes(current.status)) return false;
+    await this.setStatus(tx, id, 'cancelled', { finishedAt: new Date(), progress: null });
+    return true;
+  }
+
+  /** Stops a running AI call of a cancelled task. */
+  async abort(id: string): Promise<void> {
+    await this.redis.client.set(taskAbortKey(id), '1', 'EX', 3600);
+  }
+
+  /** Puts an already-approved task on the queue. */
+  start(tenantId: string, taskId: string, userId: string): Promise<void> {
+    return this.enqueue(tenantId, taskId, userId);
   }
 
   /** Worker entry point. Claims the task (queued → running) so a duplicate job does nothing. */
   async run(job: TaskJob): Promise<void> {
+    try {
+      await this.execute(job);
+    } finally {
+      await this.notifyFinished(job.tenantId, job.taskId);
+    }
+  }
+
+  private async execute(job: TaskJob): Promise<void> {
     const ctx: Ctx = { tenantId: job.tenantId, userId: job.userId, ip: null };
     const prepared = await this.db.withContext(ctx, async (tx) => {
       const [claimed] = await tx
@@ -390,6 +441,11 @@ export interface TaskOrigin {
   planId?: string;
   stepIndex?: number;
   skill?: { id: string; version: string; prompt: string; timeoutSec: number };
+  /** Instructions of a workflow AI step, sent as they are without the task frame's self-review. */
+  workflow?: { runId: string; nodeId: string; prompt?: string };
+  timeoutSec?: number;
+  /** Set by workflows: the task is created approved, by the person who started the run. */
+  approvedBy?: string;
 }
 
 /** An agent may only take work at or below its access level, which only a person can change. */
@@ -409,7 +465,18 @@ function assertOwnerOrApprover(task: TaskRow, ctx: Ctx, canApprove: boolean): vo
 }
 
 /** The task, as the AI sees it. The fields are the tenant's own text, framed as the work to do. */
-export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel' | 'skillPrompt'>): string {
+export function taskPrompt(
+  t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel' | 'skillPrompt'> & Partial<Pick<TaskRow, 'workflowNodeId' | 'skillId'>>,
+): string {
+  // A workflow AI step: its own instructions decide the answer's form (a condition may read it).
+  if (t.workflowNodeId && !t.skillId && t.skillPrompt) {
+    return [
+      'Quyền hạn: chỉ được soạn nội dung văn bản; không thực hiện, không giả vờ đã thực hiện hành động bên ngoài.',
+      `Mức quyền: ${ACCESS_LEVEL_LABEL[t.requiredLevel]}`,
+      '',
+      t.skillPrompt,
+    ].join('\n');
+  }
   const lines = [
     'Thực hiện công việc đã được phê duyệt dưới đây và trả về sản phẩm hoàn chỉnh (văn bản).',
     'Quyền hạn: chỉ được soạn nội dung văn bản; không thực hiện, không giả vờ đã thực hiện hành động bên ngoài (đăng bài, gửi tin, chi tiền, sửa dữ liệu).',
@@ -442,6 +509,7 @@ export function taskResponse(r: TaskRow): TaskResponse {
     requiredLevel: r.requiredLevel as TaskResponse['requiredLevel'],
     skillId: r.skillId,
     skillVersion: r.skillVersion,
+    workflowRunId: r.workflowRunId,
     status: r.status,
     progress: r.progress,
     createdBy: r.createdBy,

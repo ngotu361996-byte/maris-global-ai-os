@@ -51,6 +51,7 @@ export interface TaskResponse {
   requiredLevel: TaskLevel;
   skillId: string | null;
   skillVersion: string | null;
+  workflowRunId: string | null;
   status: TaskStatus;
   progress: string | null;
   createdBy: string;

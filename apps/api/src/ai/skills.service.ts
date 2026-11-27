@@ -283,26 +283,11 @@ export class SkillsService {
           message: `Skill "${skill.name}" đang tắt`,
         });
       const inputs = checkInputs(skill.manifest.inputs, body.inputs);
-      const first = skill.manifest.inputs.map((f) => inputs[f.name]).find((v) => v);
-      const task = await this.tasks.insert(tx, ctx, {
-        title: `${skill.name}${first ? `: ${String(first).replace(/\s+/g, ' ')}` : ''}`.slice(
-          0,
-          200,
-        ),
-        goal: skill.description,
-        scope: `Chạy Skill "${skill.name}" phiên bản ${skill.version} với dữ liệu người dùng nhập.`,
-        successCriteria: skill.successCriteria,
-        budgetUsd: Number(skill.budgetUsd),
-        agentId: body.agentId ?? null,
-        projectId: body.projectId ?? null,
-        requiredLevel: skill.requiredLevel as TaskLevel,
-        skill: {
-          id: skill.id,
-          version: skill.version,
-          prompt: skillPrompt(skill, inputs),
-          timeoutSec: skill.timeoutSec,
-        },
-      });
+      const task = await this.tasks.insert(
+        tx,
+        ctx,
+        skillTaskBody(skill, inputs, body.agentId ?? null, body.projectId ?? null),
+      );
       return taskResponse(task);
     });
   }
@@ -522,5 +507,31 @@ export function skillResponse(r: SkillRow): SkillResponse {
     checksum: r.checksum,
     status: r.status,
     updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+/** The task a skill run creates: title from the first input, the skill's budget, level and prompt. */
+export function skillTaskBody(
+  skill: SkillRow,
+  inputs: Record<string, string | number>,
+  agentId: string | null,
+  projectId: string | null,
+) {
+  const first = skill.manifest.inputs.map((f) => inputs[f.name]).find((v) => v);
+  return {
+    title: `${skill.name}${first ? `: ${String(first).replace(/\s+/g, ' ')}` : ''}`.slice(0, 200),
+    goal: skill.description,
+    scope: `Chạy Skill "${skill.name}" phiên bản ${skill.version} với dữ liệu người dùng nhập.`,
+    successCriteria: skill.successCriteria,
+    budgetUsd: Number(skill.budgetUsd),
+    agentId,
+    projectId,
+    requiredLevel: skill.requiredLevel as TaskLevel,
+    skill: {
+      id: skill.id,
+      version: skill.version,
+      prompt: skillPrompt(skill, inputs),
+      timeoutSec: skill.timeoutSec,
+    },
   };
 }
