@@ -16,9 +16,20 @@ Thay đổi nghiệp vụ ghi một dòng vào `work.outbox_events` trong cùng 
 sang hàng đợi BullMQ `maris-events` với `jobId` = id sự kiện, rồi đánh dấu đã gửi. Sự kiện có thể đến hơn một lần, nên consumer phải idempotent.
 Tên sự kiện: `<module>.<đối tượng>.<quá khứ>`, ví dụ `identity.member.added`, `security.secret.created`.
 
+## AI Gateway (Giai đoạn 3)
+
+`apps/api/src/ai`: mỗi loại nhà cung cấp là một adapter (`adapters.ts`) đổi lịch sử chat chung sang API riêng và đọc stream SSE về
+dạng chữ + token. `AiRouterService` thử lần lượt các provider đang bật theo `priority` (provider được chọn cho hội thoại đứng đầu):
+lỗi tạm thời (429, 5xx, mạng, timeout) thử lại một lần với backoff rồi chuyển provider; 401/403 chuyển provider ngay; 400 dừng
+(không dùng provider khác để né từ chối). Khi đã có chữ gửi tới người dùng thì không chuyển nữa, để không trả lời hai lần.
+Circuit breaker lưu trên Redis nên mọi instance API cùng thấy. Key chỉ được giải mã ngay trước lượt gọi và không rời máy chủ.
+
+Gửi tin nhắn: transaction 1 ghi tin người dùng + chỗ trống cho câu trả lời + audit; stream không giữ transaction;
+transaction 2 ghi câu trả lời, mọi lượt gọi provider và sự kiện `ai.message.completed`.
+
 ## Dữ liệu
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `maris_ctx` (hàm ngữ cảnh).
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

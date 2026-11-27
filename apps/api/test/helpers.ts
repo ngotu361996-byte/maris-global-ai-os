@@ -14,17 +14,17 @@ export const APP_URL = process.env.DATABASE_URL ?? 'postgres://maris_app:maris_a
 export async function resetDatabase(): Promise<void> {
   await migrate(ADMIN_URL);
   const sql = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
-  await sql`TRUNCATE work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
+  await sql`TRUNCATE ai.provider_calls, ai.messages, ai.conversations, ai.providers, work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
             identity.tenant_members, identity.role_permissions, identity.roles, identity.sessions,
             identity.tenants, identity.users`;
   await sql.end();
   const redis = new Redis(REDIS_URL);
-  const keys = await redis.keys('rl:*');
+  const keys = [...(await redis.keys('rl:*')), ...(await redis.keys('ai:cb:*'))];
   if (keys.length) await redis.del(...keys);
   await redis.quit();
 }
 
-export async function startApp(): Promise<INestApplication> {
+export async function startApp(env: Record<string, string> = {}): Promise<INestApplication> {
   const config = loadConfig({
     DATABASE_URL: APP_URL,
     MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY ?? randomBytes(32).toString('base64'),
@@ -32,6 +32,7 @@ export async function startApp(): Promise<INestApplication> {
     REDIS_URL,
     // Tests drive the relay by hand with relayOnce().
     OUTBOX_RELAY_ENABLED: 'false',
+    ...env,
   });
   const app = await createApp(config);
   await app.init();

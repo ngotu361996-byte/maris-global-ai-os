@@ -42,3 +42,37 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return body as T;
 }
+
+/**
+ * POSTs to a streaming endpoint and calls onEvent for each server-sent event (one JSON object
+ * per `data:` line). Errors before the stream starts throw ApiRequestError like api().
+ */
+export async function apiStream<E>(path: string, body: unknown, onEvent: (event: E) => void, signal?: AbortSignal): Promise<void> {
+  const headers = new Headers({ 'Content-Type': 'application/json', 'X-MARIS-Session': 'cookie', 'X-MARIS-CSRF': '1' });
+  const tenant = session.tenant();
+  if (tenant) headers.set('X-Tenant-Id', tenant);
+  const res = await fetch(`${API_URL}${path}`, { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include', signal });
+  if (!res.ok || !res.body) {
+    const err = ((await res.json().catch(() => ({}))) as ApiError).error ?? { code: 'NETWORK', message: 'Không kết nối được API' };
+    throw new ApiRequestError(res.status, err.code, err.message);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut: number;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      const data = block
+        .split('\n')
+        .filter((l) => l.startsWith('data: '))
+        .map((l) => l.slice(6))
+        .join('\n');
+      if (data) onEvent(JSON.parse(data) as E);
+    }
+  }
+}

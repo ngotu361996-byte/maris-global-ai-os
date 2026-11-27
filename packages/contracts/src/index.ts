@@ -4,3 +4,4 @@ export * from './permissions';
 export * from './errors';
 export * from './members';
 export * from './secrets';
+export * from './ai';

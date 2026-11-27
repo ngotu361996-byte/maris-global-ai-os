@@ -17,6 +17,12 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   INVITATION_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  // Allow AI Provider base URLs on private networks (self-hosted gateways). Off by default (SSRF).
+  AI_ALLOW_PRIVATE_URLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  AI_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
   NODE_ENV: z.string().default('development'),
 });
 
