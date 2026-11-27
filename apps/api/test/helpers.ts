@@ -14,7 +14,7 @@ export const APP_URL = process.env.DATABASE_URL ?? 'postgres://maris_app:maris_a
 export async function resetDatabase(): Promise<void> {
   await migrate(ADMIN_URL);
   const sql = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
-  await sql`TRUNCATE ai.files, ai.plans, ai.council_turns, ai.provider_calls, ai.councils, ai.models, ai.tasks, ai.budgets, ai.controls, ai.messages, ai.conversations, ai.memories, ai.projects, ai.agent_versions, ai.agents, ai.providers, work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
+  await sql`TRUNCATE ai.files, ai.plans, ai.council_turns, ai.provider_calls, ai.councils, ai.models, ai.tasks, ai.skills, ai.budgets, ai.controls, ai.messages, ai.conversations, ai.memories, ai.projects, ai.agent_versions, ai.agents, ai.providers, work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
             identity.tenant_members, identity.role_permissions, identity.roles, identity.sessions,
             identity.tenants, identity.users`;
   await sql.end();

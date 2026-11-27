@@ -13,7 +13,7 @@ import { SecretVaultService } from '../secrets/secret-vault.service';
 import type { ChatTurn } from './adapters';
 import { AgentsService } from './agents.service';
 import { AiProvidersService } from './ai-providers.service';
-import { AiRouterService, type ProviderRow } from './ai-router.service';
+import { AiRouterService, type ProviderRow, type RouteResult } from './ai-router.service';
 import { orderCandidates, systemPrompt, type Ctx } from './chat.service';
 import { ControlService, estopKey, taskAbortKey } from './control.service';
 import { CostGovernorService } from './cost-governor.service';
@@ -115,7 +115,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Creates a pending task. Also used by AI Central Command for the steps of an accepted plan. */
-  async insert(tx: Tx, ctx: Ctx, body: CreateTask & { planId?: string; stepIndex?: number }): Promise<TaskRow> {
+  async insert(tx: Tx, ctx: Ctx, body: CreateTask & TaskOrigin): Promise<TaskRow> {
     const requiredLevel = body.requiredLevel ?? 'prepare';
     if (body.agentId) assertLevel(await this.agents.get(tx, ctx.tenantId, body.agentId), requiredLevel);
     if (body.projectId) await this.memory.project(tx, ctx.tenantId, body.projectId);
@@ -137,9 +137,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         planId: body.planId ?? null,
         stepIndex: body.stepIndex ?? null,
         requiredLevel,
+        skillId: body.skill?.id ?? null,
+        skillVersion: body.skill?.version ?? null,
+        skillPrompt: body.skill?.prompt ?? null,
+        timeoutSec: body.skill?.timeoutSec ?? null,
       })
       .returning();
-    await this.log(tx, ctx, 'ai.task.created', row!.id, { budgetUsd: body.budgetUsd, requiredLevel, planId: body.planId ?? null });
+    await this.log(tx, ctx, 'ai.task.created', row!.id, { budgetUsd: body.budgetUsd, requiredLevel, planId: body.planId ?? null, skillId: body.skill?.id ?? null });
     await this.outbox.enqueue(tx, { tenantId: ctx.tenantId, type: 'ai.task.created', payload: { taskId: row!.id } });
     return row!;
   }
@@ -260,7 +264,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const abort = new AbortController();
     const unwatch = this.control.watch([taskAbortKey(job.taskId), estopKey(job.tenantId)], abort);
-    let result;
+    // A skill's timeout: abort the AI call and record the task as failed, not paused.
+    let timedOut = false;
+    const timer = prepared.task.timeoutSec
+      ? setTimeout(() => {
+          timedOut = true;
+          abort.abort();
+        }, prepared.task.timeoutSec * 1000)
+      : null;
+    let result: RouteResult;
     try {
       result = await this.router.route({
         candidates: prepared.candidates,
@@ -275,6 +287,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
     } finally {
       unwatch();
+      if (timer) clearTimeout(timer);
+    }
+    if (timedOut && result.status === 'cancelled') {
+      result = { ...result, status: 'error' as const, errorCode: 'TASK_TIMEOUT', errorMessage: `Quá thời gian cho phép (${prepared.task.timeoutSec} giây)` };
     }
 
     await this.db.withContext(ctx, async (tx) => {
@@ -369,6 +385,13 @@ function expectStatus(task: TaskRow, allowed: AiTaskStatus[]): void {
   }
 }
 
+/** Where a task came from, besides a person filling in the form. */
+export interface TaskOrigin {
+  planId?: string;
+  stepIndex?: number;
+  skill?: { id: string; version: string; prompt: string; timeoutSec: number };
+}
+
 /** An agent may only take work at or below its access level, which only a person can change. */
 export function assertLevel(agent: { name: string; accessLevel: AccessLevel }, needs: AccessLevel): void {
   if (!levelAtLeast(agent.accessLevel, needs)) {
@@ -386,8 +409,8 @@ function assertOwnerOrApprover(task: TaskRow, ctx: Ctx, canApprove: boolean): vo
 }
 
 /** The task, as the AI sees it. The fields are the tenant's own text, framed as the work to do. */
-export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel'>): string {
-  return [
+export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel' | 'skillPrompt'>): string {
+  const lines = [
     'Thực hiện công việc đã được phê duyệt dưới đây và trả về sản phẩm hoàn chỉnh (văn bản).',
     'Quyền hạn: chỉ được soạn nội dung văn bản; không thực hiện, không giả vờ đã thực hiện hành động bên ngoài (đăng bài, gửi tin, chi tiền, sửa dữ liệu).',
     'Nếu một phần cần hành động bên ngoài, ghi rõ bước đó để người dùng tự làm hoặc duyệt ở giai đoạn sau.',
@@ -397,7 +420,9 @@ export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'succes
     `Phạm vi: ${t.scope}`,
     `Tiêu chí hoàn thành: ${t.successCriteria}`,
     'Cuối câu trả lời, tự đánh giá ngắn sản phẩm theo từng tiêu chí hoàn thành.',
-  ].join('\n');
+  ];
+  if (t.skillPrompt) lines.push('', t.skillPrompt);
+  return lines.join('\n');
 }
 
 export function taskResponse(r: TaskRow): TaskResponse {
@@ -415,6 +440,8 @@ export function taskResponse(r: TaskRow): TaskResponse {
     planId: r.planId,
     stepIndex: r.stepIndex,
     requiredLevel: r.requiredLevel as TaskResponse['requiredLevel'],
+    skillId: r.skillId,
+    skillVersion: r.skillVersion,
     status: r.status,
     progress: r.progress,
     createdBy: r.createdBy,

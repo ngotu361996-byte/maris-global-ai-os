@@ -13,3 +13,4 @@ export * from './council';
 export * from './files';
 export * from './access-levels';
 export * from './command';
+export * from './skills';

@@ -49,6 +49,8 @@ export interface TaskResponse {
   planId: string | null;
   stepIndex: number | null;
   requiredLevel: TaskLevel;
+  skillId: string | null;
+  skillVersion: string | null;
   status: TaskStatus;
   progress: string | null;
   createdBy: string;

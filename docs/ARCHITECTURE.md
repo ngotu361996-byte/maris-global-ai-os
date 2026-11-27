@@ -61,6 +61,12 @@ mức quyền (`levelAtLeast`), thu ngân sách cho vừa tổng. Không có gì
 kết thúc, gửi kết quả từng việc trong `<task_result>`. Mức quyền Agent chỉ đổi qua `PATCH /ai/agents/:id` (`ai.manage`) và được
 kiểm tra lại khi công việc chạy.
 
+Skill (`skills.service.ts`, Giai đoạn 4): bản ghi khai báo trong `ai.skills`, không có mã chạy. `run` kiểm tra ô nhập
+(`checkInputs`), dựng lời nhắc với từng giá trị bọc trong `<skill_input>` (`skillPrompt`) rồi tạo công việc `pending` qua
+`TasksService.insert`, kèm `skill_id`, `skill_version`, lời nhắc và `timeout_sec`; khi chạy, bộ đếm giờ hủy lệnh gọi AI và ghi
+`TASK_TIMEOUT`. Checksum là SHA-256 của `canonicalJson` (khóa sắp xếp) phần thân manifest không gồm `checksum`; `import`
+kiểm tra Zod, quyền (`ai.generate_text`), phụ thuộc rỗng và checksum, rồi lưu Skill ở trạng thái `paused`.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
