@@ -11,6 +11,8 @@ import {
   type DevicePairingResponse,
   type DeviceResponse,
   type ServerStatusResponse,
+  WORKER_JOB_KIND_INFO,
+  type WorkerJobKind,
 } from '@maris/contracts';
 import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
@@ -187,6 +189,22 @@ export default function InfraPage() {
       fail(err);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function setMaxJobs(d: DeviceResponse, maxJobs: number) {
+    setError(null);
+    setOk(null);
+    try {
+      await api(`/devices/${d.id}`, { method: 'PATCH', body: JSON.stringify({ maxJobs }) });
+      setOk(
+        maxJobs === 0
+          ? `“${d.name}” sẽ không nhận việc mới.`
+          : `“${d.name}” nhận tối đa ${maxJobs} việc cùng lúc.`,
+      );
+      load();
+    } catch (err) {
+      fail(err);
     }
   }
 
@@ -369,6 +387,7 @@ export default function InfraPage() {
                   <th>RAM</th>
                   <th>Ổ đĩa</th>
                   <th>GPU</th>
+                  <th>Việc</th>
                   <th>Lần báo cuối</th>
                 </tr>
               </thead>
@@ -414,6 +433,9 @@ export default function InfraPage() {
                           '–'
                         )}
                       </td>
+                      <td className="py-2 pr-3 tabular-nums">
+                        {d.pairedAt ? `${d.runningJobs}/${d.maxJobs}` : '–'}
+                      </td>
                       <td className="py-2 text-muted whitespace-nowrap">{ago(d.lastSeenAt)}</td>
                     </tr>
                   );
@@ -458,6 +480,23 @@ export default function InfraPage() {
             </button>
           </div>
 
+          {current.status !== 'revoked' && (
+            <label className="mb-4 flex items-center gap-2 text-sm">
+              <span className="text-muted">Số việc chạy cùng lúc:</span>
+              <select
+                value={current.maxJobs}
+                onChange={(e) => setMaxJobs(current, Number(e.target.value))}
+                className={`${inputCls} w-auto py-1`}
+              >
+                {[0, 1, 2, 3, 4, 6, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 0 ? '0 (không nhận việc)' : n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <dl className="mb-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             {[
               ['Trạng thái', DEVICE_STATUS_LABEL[current.status]],
@@ -475,9 +514,20 @@ export default function InfraPage() {
                 'GPU',
                 current.info.gpus?.length
                   ? current.info.gpus.map((g) => g.name).join(', ')
-                  : 'Không có GPU NVIDIA',
+                  : current.pairedAt
+                    ? 'Không có GPU NVIDIA'
+                    : undefined,
               ],
               ['Phiên bản Worker', current.info.agentVersion],
+              [
+                'Nhận việc',
+                current.pairedAt &&
+                  (current.capabilities.length
+                    ? current.capabilities
+                        .map((k) => WORKER_JOB_KIND_INFO[k as WorkerJobKind]?.label ?? k)
+                        .join(', ')
+                    : 'Không (chỉ báo cáo tài nguyên)'),
+              ],
               ['Địa chỉ IP gần nhất', current.lastIp],
               [
                 'Ghép nối lúc',

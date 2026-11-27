@@ -47,3 +47,46 @@ test('a sample from this machine is accepted by the server schema', async () => 
   assert.ok(heartbeatSchema.safeParse(sample).success);
   assert.ok((sample.ramTotalMb ?? 0) > 0);
 });
+
+test('the test job counts, reports progress, fails on request and stops when told', async () => {
+  const { HANDLERS, JobError } = await import('./jobs');
+  const reports: (number | undefined)[] = [];
+  const ctx = (signal: AbortSignal) => ({
+    signal,
+    server: 'http://127.0.0.1:9',
+    report: (p?: number) => reports.push(p),
+  });
+  assert.deepEqual(await HANDLERS['test.wait']({ seconds: 1 }, ctx(new AbortController().signal)), {
+    waitedSec: 1,
+  });
+  assert.deepEqual(reports, [100]);
+  await assert.rejects(
+    HANDLERS['test.wait']({ seconds: 1, fail: true }, ctx(new AbortController().signal)),
+    (e: unknown) => e instanceof JobError && e.code === 'TEST_FAILURE',
+  );
+  const c = new AbortController();
+  setTimeout(() => c.abort(), 100);
+  await assert.rejects(
+    HANDLERS['test.wait']({ seconds: 30 }, ctx(c.signal)),
+    (e: unknown) => e instanceof JobError && e.code === 'CANCELLED',
+  );
+  await assert.rejects(HANDLERS['test.wait']({ seconds: 1, command: 'whoami' }, ctx(c.signal)));
+});
+
+test('the machine check reports this machine and never fails when MARIS or a GPU is missing', async () => {
+  const { HANDLERS, capabilities } = await import('./jobs');
+  const r = (await HANDLERS.diagnostics(
+    {},
+    {
+      signal: new AbortController().signal,
+      server: 'http://127.0.0.1:9',
+      report: () => {},
+    },
+  )) as { hostname: string; ram: { totalMb: number }; latencyMs: number | null; gpus: unknown[] };
+  assert.equal(typeof r.hostname, 'string');
+  assert.ok(r.ram.totalMb > 0);
+  assert.equal(r.latencyMs, null);
+  assert.ok(Array.isArray(r.gpus));
+  const caps = await capabilities();
+  assert.ok(caps.includes('diagnostics') && caps.includes('test.wait'));
+});

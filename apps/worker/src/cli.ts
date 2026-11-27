@@ -2,15 +2,18 @@
 import { HEARTBEAT_INTERVAL_SEC, PAIRING_PREFIX } from '@maris/contracts';
 import { heartbeat, pair, ServerError } from './client';
 import { configPath, loadConfig, normalizeServer, saveConfig } from './config';
+import { capabilities, JobRunner } from './jobs';
 import { AGENT_VERSION, collectInfo, Sampler } from './metrics';
 
 const HELP = `MARIS Worker ${AGENT_VERSION}
 
   pair "<chuỗi ghép nối>" --server <địa chỉ MARIS>   Ghép nối máy này (chuỗi dùng được một lần)
-  run                                                Chạy và báo cáo tài nguyên mỗi ${HEARTBEAT_INTERVAL_SEC} giây
+  run                                                Chạy, báo cáo tài nguyên mỗi ${HEARTBEAT_INTERVAL_SEC} giây và nhận việc
+  run --monitor-only                                 Chỉ báo cáo tài nguyên, không nhận việc
   status                                             Xem máy này đã ghép nối với đâu
 
-Worker chỉ kết nối ra máy chủ MARIS. Nó không mở cổng và không chạy lệnh nào từ máy chủ.`;
+Worker chỉ kết nối ra máy chủ MARIS. Nó không mở cổng và không chạy lệnh nào từ máy chủ:
+nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, việc thử).`;
 
 const time = () => new Date().toLocaleTimeString();
 const say = (msg: string) => console.log(`[${time()}] ${msg}`);
@@ -44,10 +47,14 @@ async function cmdStatus(): Promise<void> {
   say(`Thiết bị "${c.name}" (${c.deviceId}) tại ${c.server}`);
 }
 
-async function cmdRun(): Promise<void> {
+async function cmdRun(args: string[]): Promise<void> {
   const c = await loadConfig();
   if (!c) throw new Error('Máy này chưa ghép nối. Chạy lệnh pair trước.');
   const sampler = new Sampler();
+  const jobsOn = !args.includes('--monitor-only');
+  const runner = jobsOn ? new JobRunner(c.server, c.token, say) : null;
+  let caps = jobsOn ? await capabilities() : [];
+  let capsCheckedAt = Date.now();
   let intervalSec = HEARTBEAT_INTERVAL_SEC;
   let failures = 0;
   let lastStatus = '';
@@ -58,16 +65,34 @@ async function cmdRun(): Promise<void> {
     stopping = true;
     say('Đang dừng Worker.');
     clearTimeout(timer);
+    runner?.stop();
     wake();
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
   say(`Worker "${c.name}" kết nối tới ${c.server}`);
+  say(
+    jobsOn ? `Nhận các loại việc: ${caps.join(', ')}` : 'Chỉ báo cáo tài nguyên, không nhận việc.',
+  );
+  let runnerStarted = false;
 
   while (!stopping) {
     let wait = intervalSec;
     try {
-      const r = await heartbeat(c.server, c.token, await sampler.sample());
+      if (jobsOn && Date.now() - capsCheckedAt > 5 * 60_000) {
+        const next = await capabilities();
+        if (next.join() !== caps.join()) say(`Nhận các loại việc: ${next.join(', ')}`);
+        caps = next;
+        capsCheckedAt = Date.now();
+      }
+      const r = await heartbeat(c.server, c.token, {
+        ...(await sampler.sample()),
+        capabilities: caps,
+      });
+      if (runner && !runnerStarted) {
+        runner.start();
+        runnerStarted = true;
+      }
       intervalSec = Math.min(300, Math.max(5, r.heartbeatSec));
       wait = intervalSec;
       if (failures > 0) say('Đã kết nối lại.');
@@ -82,6 +107,7 @@ async function cmdRun(): Promise<void> {
           'Khóa thiết bị đã bị thu hồi hoặc không đúng. Tạo chuỗi ghép nối mới trên trang Hạ tầng.',
         );
         process.exitCode = 2;
+        runner?.stop();
         return;
       }
       failures++;
@@ -98,7 +124,7 @@ async function cmdRun(): Promise<void> {
 async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === 'pair') return cmdPair(args);
-  if (cmd === 'run') return cmdRun();
+  if (cmd === 'run') return cmdRun(args);
   if (cmd === 'status') return cmdStatus();
   console.log(HELP);
 }

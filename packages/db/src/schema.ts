@@ -754,6 +754,8 @@ export const devices = infra.table('devices', {
   lastSeenAt: ts('last_seen_at'),
   lastIp: text('last_ip'),
   pairedAt: ts('paired_at'),
+  maxJobs: integer('max_jobs').notNull().default(1),
+  capabilities: text('capabilities').array().notNull().default([]),
   createdBy: uuid('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
@@ -780,6 +782,49 @@ export const deviceEvents = infra.table('device_events', {
   deviceId: uuid('device_id').notNull(),
   level: text('level').$type<'info' | 'warning' | 'error'>().notNull(),
   kind: text('kind').notNull(),
+  message: text('message').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export type WorkerJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export const workerJobs = infra.table('worker_jobs', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  input: jsonb('input').$type<Record<string, unknown>>().notNull().default({}),
+  status: text('status').$type<WorkerJobStatus>().notNull().default('queued'),
+  priority: integer('priority').notNull().default(0),
+  targetDeviceId: uuid('target_device_id'),
+  targetKinds: text('target_kinds').array().$type<DeviceKind[]>().notNull().default([]),
+  needGpu: boolean('need_gpu').notNull().default(false),
+  minFreeRamMb: integer('min_free_ram_mb').notNull().default(0),
+  timeoutSec: integer('timeout_sec').notNull().default(600),
+  maxAttempts: integer('max_attempts').notNull().default(3),
+  attempts: integer('attempts').notNull().default(0),
+  deviceId: uuid('device_id'),
+  excludedDeviceIds: uuid('excluded_device_ids').array().notNull().default([]),
+  leaseExpiresAt: ts('lease_expires_at'),
+  cancelRequested: boolean('cancel_requested').notNull().default(false),
+  progress: integer('progress').notNull().default(0),
+  progressNote: text('progress_note'),
+  result: jsonb('result').$type<unknown>(),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  startedAt: ts('started_at'),
+  finishedAt: ts('finished_at'),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const workerJobLogs = infra.table('worker_job_logs', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  jobId: uuid('job_id').notNull(),
+  deviceId: uuid('device_id'),
+  level: text('level').$type<'info' | 'warning' | 'error'>().notNull(),
   message: text('message').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 });

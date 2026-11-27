@@ -16,6 +16,17 @@ import {
 import type { Request } from 'express';
 import { z } from 'zod';
 import {
+  createWorkerJobSchema,
+  finishJobSchema,
+  jobProgressSchema,
+  WORKER_JOB_STATUSES,
+  type ClaimJobResponse,
+  type CreateWorkerJob,
+  type FinishJob,
+  type JobProgress,
+  type JobProgressResponse,
+  type WorkerJobLogResponse,
+  type WorkerJobResponse,
   createDeviceSchema,
   heartbeatSchema,
   pairDeviceSchema,
@@ -45,6 +56,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { RateLimit } from '../ratelimit/rate-limit.guard';
 import { RequirePermission, TenantGuard } from '../tenancy/tenant.guard';
 import { DevicesService } from './devices.service';
+import { WorkerJobsService } from './worker-jobs.service';
 
 const ctxOf = (user: AuthUser, tenant: TenantContext, req: Request): Ctx => ({
   tenantId: tenant.id,
@@ -195,13 +207,97 @@ export class DevicesController {
   }
 }
 
+const jobsQuery = z.object({
+  status: z.enum(WORKER_JOB_STATUSES).optional(),
+  deviceId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** Jobs for workers, for people with a session. */
+@Controller('worker-jobs')
+@UseGuards(AuthGuard, TenantGuard)
+export class WorkerJobsController {
+  constructor(private readonly jobs: WorkerJobsService) {}
+
+  @Get()
+  @RequirePermission('infra.read')
+  list(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Query(new ZodPipe(jobsQuery)) q: z.infer<typeof jobsQuery>,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse[]> {
+    return this.jobs.list(ctxOf(user, tenant, req), q);
+  }
+
+  @Post()
+  @RequirePermission('infra.manage')
+  create(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Body(new ZodPipe(createWorkerJobSchema)) body: CreateWorkerJob,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse> {
+    return this.jobs.create(ctxOf(user, tenant, req), body);
+  }
+
+  @Get(':id')
+  @RequirePermission('infra.read')
+  get(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse & { logs: WorkerJobLogResponse[] }> {
+    return this.jobs.get(ctxOf(user, tenant, req), id);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @RequirePermission('infra.manage')
+  cancel(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse> {
+    return this.jobs.cancel(ctxOf(user, tenant, req), id);
+  }
+
+  @Post(':id/reassign')
+  @HttpCode(200)
+  @RequirePermission('infra.manage')
+  reassign(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse> {
+    return this.jobs.reassign(ctxOf(user, tenant, req), id);
+  }
+
+  @Post(':id/retry')
+  @RequirePermission('infra.manage')
+  retry(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<WorkerJobResponse> {
+    return this.jobs.retry(ctxOf(user, tenant, req), id);
+  }
+}
+
 /**
  * Public endpoints for the worker program. No session: the pairing string, then the device key in
  * X-Maris-Device, is the credential. The worker always calls in; nothing here runs a command.
  */
 @Controller('agent')
 export class DeviceAgentController {
-  constructor(private readonly devices: DevicesService) {}
+  constructor(
+    private readonly devices: DevicesService,
+    private readonly jobs: WorkerJobsService,
+  ) {}
 
   @Post('pair')
   @HttpCode(200)
@@ -222,5 +318,34 @@ export class DeviceAgentController {
     @Req() req: Request,
   ): Promise<HeartbeatResponse> {
     return this.devices.heartbeat(key, body, clientIp(req));
+  }
+
+  @Post('jobs/claim')
+  @HttpCode(200)
+  @RateLimit({ name: 'agent-claim', limit: 600, windowSec: 60, by: 'ip' })
+  claim(@Headers('x-maris-device') key: string | undefined): Promise<ClaimJobResponse> {
+    return this.jobs.claim(key);
+  }
+
+  @Post('jobs/:id/progress')
+  @HttpCode(200)
+  @RateLimit({ name: 'agent-progress', limit: 600, windowSec: 60, by: 'ip' })
+  progress(
+    @Headers('x-maris-device') key: string | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(jobProgressSchema)) body: JobProgress,
+  ): Promise<JobProgressResponse> {
+    return this.jobs.progress(key, id, body);
+  }
+
+  @Post('jobs/:id/finish')
+  @HttpCode(200)
+  @RateLimit({ name: 'agent-finish', limit: 600, windowSec: 60, by: 'ip' })
+  finish(
+    @Headers('x-maris-device') key: string | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(finishJobSchema)) body: FinishJob,
+  ): Promise<{ accepted: boolean }> {
+    return this.jobs.finish(key, id, body);
   }
 }

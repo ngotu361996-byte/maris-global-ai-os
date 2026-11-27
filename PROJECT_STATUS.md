@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 13)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 14)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -8,7 +8,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
-| 5. Hạ tầng | Sprint 13 (thiết bị, Worker, theo dõi tài nguyên) đang review; Sprint 14 (phân việc cho Worker), Sprint 15 (sandbox chạy mã) |
+| 5. Hạ tầng | Sprint 13 (thiết bị, Worker, theo dõi tài nguyên) đã merge; Sprint 14 (giao việc cho Worker) đang review; Sprint 15 (sandbox chạy mã, giám sát hệ thống) |
 | 6–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -130,7 +130,18 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 13 – Thiết bị và Worker (Giai đoạn 5)
+## Sprint 14 – Giao việc cho Worker (Giai đoạn 5)
+
+- Migration `0014`: `infra.worker_jobs`, `infra.worker_job_logs` (RLS); thiết bị có thêm `max_jobs` (số việc chạy cùng lúc) và `capabilities` (loại việc Worker báo làm được)
+- Loại việc cố định, cài sẵn trong chương trình Worker, không có loại nào chạy lệnh shell hay mã từ máy chủ: Kiểm tra máy (`diagnostics`), AI cục bộ qua Ollama trên chính máy đó (`ollama.generate`, địa chỉ cố định 127.0.0.1:11434), Việc thử (`test.wait`). Ô nhập được kiểm tra ở cả máy chủ và Worker
+- Phân việc: Worker hỏi việc mỗi 5 giây (`POST /agent/jobs/claim`). Chỉ nhận khi thiết bị đang hoạt động, chưa đủ `max_jobs`, không có cảnh báo RAM hay ổ đĩa, có GPU mát nếu việc cần GPU, đủ RAM trống, đúng loại việc, đúng máy hoặc loại máy nếu có chỉ định. Ưu tiên cao trước, rồi việc cũ trước. `FOR UPDATE SKIP LOCKED` nên hai Worker không nhận trùng
+- Thuê việc 60 giây, gia hạn mỗi lần báo tiến độ (10 giây một lần). Hết hạn thì việc về hàng đợi cho Worker khác (máy vừa mất việc chỉ nhận lại sau 60 giây), tối đa `max_attempts` lần rồi báo lỗi `WORKER_LOST`. Quá `timeout_sec` thì lỗi `JOB_TIMEOUT` và Worker được bảo dừng. Thu hồi hay xóa thiết bị thì việc đang chạy về hàng đợi ngay. Việc dọn này chạy mỗi khi Worker hỏi việc hoặc có người mở danh sách, không cần tiến trình nền
+- Hủy (việc chờ dừng ngay, việc đang chạy dừng ở lần báo kế tiếp), Chuyển sang máy khác, Giao lại. Việc lỗi ghi sự kiện cảnh báo của thiết bị. Kết quả tối đa 64 KB. Thao tác của người dùng ghi audit
+- Worker 0.14.0: `pnpm worker run` nhận việc (tự nhận ra Ollama), `pnpm worker run --monitor-only` chỉ báo cáo tài nguyên. Ctrl+C trả việc đang chạy về hàng đợi
+- Trang `/infra/jobs` (mục M32 “Việc của Worker”): giao việc, tiến độ, máy đang chạy, số lần thử, nhật ký, kết quả (câu trả lời AI hiển thị như văn bản). Trang Hạ tầng thêm cột Việc (đang chạy/tối đa) và chỉnh số việc chạy cùng lúc
+- Giới hạn: chưa chạy mã hay lệnh tùy ý (chờ sandbox Sprint 15); chưa nối Workflow với Worker; chưa có “khởi động lại dịch vụ được phép”
+
+## Sprint 13 – Thiết bị và Worker (Giai đoạn 5, đã merge)
 
 - Migration `0013`: schema `infra` với `devices`, `device_metrics`, `device_events` (RLS theo tenant); quyền `infra.read`, `infra.manage` cho owner và administrator
 - Loại thiết bị theo đặc tả Phần 26: VPS điều hành trung tâm, máy quản trị, máy nhân viên, GPU Worker, Media Worker, AI Local Worker, Code Runner

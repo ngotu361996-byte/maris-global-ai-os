@@ -95,6 +95,11 @@ chuỗi ghép nối hoặc khóa thiết bị rồi chạy trong `db.withContext
 SHA-256. Mỗi nhịp báo ghi một dòng `infra.device_metrics`, sinh sự kiện khi có cảnh báo mới hoặc khi kết nối lại, và xóa chỉ số
 cũ hơn 24 giờ. Trạng thái trực tuyến tính lúc đọc từ `last_seen_at`, không cần tiến trình nền.
 
+Việc của Worker (`devices/worker-jobs.service.ts`, Sprint 14): Worker kéo việc (`claim`), không có kết nối đẩy vào máy. Mỗi
+việc là một loại cố định trong `WORKER_JOB_KINDS`; Worker thực hiện bằng mã của chính nó (`apps/worker/src/jobs.ts`). Nhận việc
+dùng `SELECT … FOR UPDATE SKIP LOCKED` và ghi hạn thuê (`lease_expires_at`); báo tiến độ gia hạn. `sweep()` trả việc hết hạn thuê
+về hàng đợi hoặc báo lỗi, và dừng việc quá giờ; hàm chạy trong transaction của lần hỏi việc hay lần đọc danh sách kế tiếp.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

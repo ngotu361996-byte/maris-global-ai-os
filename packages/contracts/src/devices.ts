@@ -45,7 +45,15 @@ export const createDeviceSchema = z.object({
 });
 export type CreateDevice = z.input<typeof createDeviceSchema>;
 
-export const updateDeviceSchema = z.object({ name: z.string().trim().min(1).max(80) });
+export const updateDeviceSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    /** Resource limit: jobs this device may run at once. 0 takes it out of the rotation. */
+    maxJobs: z.number().int().min(0).max(16).optional(),
+  })
+  .refine((v) => v.name !== undefined || v.maxJobs !== undefined, {
+    message: 'Không có gì để đổi',
+  });
 export type UpdateDevice = z.input<typeof updateDeviceSchema>;
 
 const num = (max: number) => z.number().finite().min(0).max(max);
@@ -92,6 +100,11 @@ export const heartbeatSchema = z.object({
   gpus: z.array(deviceGpuSchema).max(64).default([]),
   cpuTempC: z.number().finite().min(-50).max(200).nullable().default(null),
   agentVersion: text(40).optional(),
+  /** Job kinds this worker can run right now (see WORKER_JOB_KINDS). Unknown kinds are ignored. */
+  capabilities: z
+    .array(z.string().regex(/^[a-z][a-z0-9_.]{1,39}$/))
+    .max(32)
+    .optional(),
 });
 export type Heartbeat = z.input<typeof heartbeatSchema>;
 
@@ -143,6 +156,11 @@ export interface DeviceResponse {
   /** Set while a pairing string is waiting to be used. */
   pairingExpiresAt: string | null;
   latest: DeviceMetricResponse | null;
+  /** Jobs this device may run at once; 0 means it gets none. */
+  maxJobs: number;
+  /** Job kinds the worker said it can run. */
+  capabilities: string[];
+  runningJobs: number;
   /** Current warnings worked out from the latest sample and the last heartbeat. */
   warnings: string[];
   createdAt: string;

@@ -7,7 +7,7 @@ import {
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { statfs } from 'node:fs/promises';
 import os from 'node:os';
-import { and, asc, desc, eq, gte, isNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
 import {
   HEARTBEAT_INTERVAL_SEC,
@@ -16,6 +16,7 @@ import {
   OFFLINE_AFTER_SEC,
   PAIRING_PREFIX,
   PAIRING_TTL_MIN,
+  WORKER_JOB_KINDS,
   type CreateDevice,
   type DeviceEventResponse,
   type DeviceMetricResponse,
@@ -32,8 +33,8 @@ import type { Ctx } from '../ai/chat.service';
 import { AuditService } from '../audit/audit.service';
 import { DbService, type Tx } from '../db/db.service';
 
-const { devices, deviceMetrics, deviceEvents } = schema;
-type DeviceRow = typeof devices.$inferSelect;
+const { devices, deviceMetrics, deviceEvents, workerJobs } = schema;
+export type DeviceRow = typeof devices.$inferSelect;
 type MetricRow = typeof deviceMetrics.$inferSelect;
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -91,14 +92,20 @@ export class DevicesService {
         .from(devices)
         .where(and(eq(devices.tenantId, ctx.tenantId), isNull(devices.deletedAt)))
         .orderBy(asc(devices.name));
-      return Promise.all(rows.map(async (r) => respond(r, await this.latest(tx, r.id))));
+      const running = await this.runningCounts(
+        tx,
+        rows.map((r) => r.id),
+      );
+      return Promise.all(
+        rows.map(async (r) => respond(r, await this.latest(tx, r.id), running.get(r.id) ?? 0)),
+      );
     });
   }
 
   get(ctx: Ctx, id: string): Promise<DeviceResponse> {
     return this.db.withContext(ctx, async (tx) => {
       const r = await this.row(tx, ctx.tenantId, id);
-      return respond(r, await this.latest(tx, r.id));
+      return respond(r, await this.latest(tx, r.id), await this.runningCount(tx, r.id));
     });
   }
 
@@ -156,7 +163,7 @@ export class DevicesService {
       await this.event(tx, row!, 'info', 'created', 'Đã tạo thiết bị, chờ Worker ghép nối');
       await this.log(tx, ctx, 'infra.device.created', id, { name: body.name, kind: body.kind });
       return {
-        device: respond(row!, null),
+        device: respond(row!, null, 0),
         pairing: `${PAIRING_PREFIX}.${ctx.tenantId}.${id}.${secret}`,
         expiresAt: expiresAt.toISOString(),
       };
@@ -181,7 +188,7 @@ export class DevicesService {
         .returning();
       await this.log(tx, ctx, 'infra.device.pairing_created', id, { name: current.name });
       return {
-        device: respond(row!, await this.latest(tx, id)),
+        device: respond(row!, await this.latest(tx, id), await this.runningCount(tx, id)),
         pairing: `${PAIRING_PREFIX}.${ctx.tenantId}.${id}.${secret}`,
         expiresAt: expiresAt.toISOString(),
       };
@@ -193,11 +200,22 @@ export class DevicesService {
       const current = await this.row(tx, ctx.tenantId, id);
       const [row] = await tx
         .update(devices)
-        .set({ name: body.name, updatedAt: new Date() })
+        .set({
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.maxJobs !== undefined ? { maxJobs: body.maxJobs } : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(devices.id, id))
         .returning();
-      await this.log(tx, ctx, 'infra.device.renamed', id, { from: current.name, to: body.name });
-      return respond(row!, await this.latest(tx, id));
+      if (body.name !== undefined && body.name !== current.name)
+        await this.log(tx, ctx, 'infra.device.renamed', id, { from: current.name, to: body.name });
+      if (body.maxJobs !== undefined && body.maxJobs !== current.maxJobs)
+        await this.log(tx, ctx, 'infra.device.limit_changed', id, {
+          name: current.name,
+          from: current.maxJobs,
+          to: body.maxJobs,
+        });
+      return respond(row!, await this.latest(tx, id), await this.runningCount(tx, id));
     });
   }
 
@@ -228,7 +246,7 @@ export class DevicesService {
       await this.log(tx, ctx, paused ? 'infra.device.paused' : 'infra.device.resumed', id, {
         name: current.name,
       });
-      return respond(row!, await this.latest(tx, id));
+      return respond(row!, await this.latest(tx, id), await this.runningCount(tx, id));
     });
   }
 
@@ -248,8 +266,9 @@ export class DevicesService {
         .where(eq(devices.id, id))
         .returning();
       await this.event(tx, row!, 'warning', 'revoked', 'Đã thu hồi khóa thiết bị');
+      await requeueJobsOf(tx, row!, 'Thiết bị bị thu hồi');
       await this.log(tx, ctx, 'infra.device.revoked', id, { name: current.name });
-      return respond(row!, await this.latest(tx, id));
+      return respond(row!, await this.latest(tx, id), await this.runningCount(tx, id));
     });
   }
 
@@ -266,6 +285,7 @@ export class DevicesService {
           pairingExpiresAt: null,
         })
         .where(eq(devices.id, id));
+      await requeueJobsOf(tx, current, 'Thiết bị bị xóa');
       await this.log(tx, ctx, 'infra.device.deleted', id, { name: current.name });
     });
   }
@@ -375,21 +395,7 @@ export class DevicesService {
     body: Heartbeat,
     ip: string | null,
   ): Promise<HeartbeatResponse> {
-    const cred = splitCredential(deviceKey, null);
-    if (!cred) throw unauthorized();
-    return this.db.withContext({ tenantId: cred.tenantId }, async (tx) => {
-      const [row] = await tx
-        .select()
-        .from(devices)
-        .where(
-          and(
-            eq(devices.id, cred.deviceId),
-            eq(devices.tenantId, cred.tenantId),
-            isNull(devices.deletedAt),
-          ),
-        );
-      if (!row || row.status === 'revoked' || !sameHash(row.tokenHash, cred.secret))
-        throw unauthorized();
+    return this.withDevice(deviceKey, async (tx, row) => {
       const now = new Date();
       const previous = await this.latest(tx, row.id);
       const sample = {
@@ -409,7 +415,7 @@ export class DevicesService {
       };
       await tx.insert(deviceMetrics).values({
         id: uuidv7(),
-        tenantId: cred.tenantId,
+        tenantId: row.tenantId,
         deviceId: row.id,
         ...sample,
         recordedAt: now,
@@ -437,6 +443,13 @@ export class DevicesService {
         .set({
           lastSeenAt: now,
           lastIp: ip,
+          ...(body.capabilities
+            ? {
+                capabilities: body.capabilities.filter((c) =>
+                  (WORKER_JOB_KINDS as readonly string[]).includes(c),
+                ),
+              }
+            : {}),
           ...(body.agentVersion && body.agentVersion !== row.info.agentVersion
             ? { info: { ...row.info, agentVersion: body.agentVersion } }
             : {}),
@@ -462,6 +475,47 @@ export class DevicesService {
   }
 
   // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Runs fn as the device that owns this key, inside its tenant. Throws 401 when the key is wrong,
+   * the device was deleted or revoked.
+   */
+  withDevice<T>(
+    deviceKey: string | undefined,
+    fn: (tx: Tx, device: DeviceRow) => Promise<T>,
+  ): Promise<T> {
+    const cred = splitCredential(deviceKey, null);
+    if (!cred) throw unauthorized();
+    return this.db.withContext({ tenantId: cred.tenantId }, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(devices)
+        .where(
+          and(
+            eq(devices.id, cred.deviceId),
+            eq(devices.tenantId, cred.tenantId),
+            isNull(devices.deletedAt),
+          ),
+        );
+      if (!row || row.status === 'revoked' || !sameHash(row.tokenHash, cred.secret))
+        throw unauthorized();
+      return fn(tx, row);
+    });
+  }
+
+  private async runningCount(tx: Tx, deviceId: string): Promise<number> {
+    return (await this.runningCounts(tx, [deviceId])).get(deviceId) ?? 0;
+  }
+
+  private async runningCounts(tx: Tx, ids: string[]): Promise<Map<string, number>> {
+    if (ids.length === 0) return new Map();
+    const rows = await tx
+      .select({ deviceId: workerJobs.deviceId, n: count() })
+      .from(workerJobs)
+      .where(and(eq(workerJobs.status, 'running'), inArray(workerJobs.deviceId, ids)))
+      .groupBy(workerJobs.deviceId);
+    return new Map(rows.map((r) => [r.deviceId!, Number(r.n)]));
+  }
 
   private async latest(tx: Tx, deviceId: string): Promise<MetricRow | null> {
     const [m] = await tx
@@ -530,7 +584,7 @@ function metricResponse(m: MetricRow): DeviceMetricResponse {
   };
 }
 
-function respond(r: DeviceRow, latest: MetricRow | null): DeviceResponse {
+function respond(r: DeviceRow, latest: MetricRow | null, runningJobs: number): DeviceResponse {
   const online =
     r.status !== 'revoked' &&
     !!r.lastSeenAt &&
@@ -552,6 +606,9 @@ function respond(r: DeviceRow, latest: MetricRow | null): DeviceResponse {
     pairedAt: r.pairedAt?.toISOString() ?? null,
     pairingExpiresAt: pairingOpen ? r.pairingExpiresAt!.toISOString() : null,
     latest: m,
+    maxJobs: r.maxJobs,
+    capabilities: r.capabilities,
+    runningJobs,
     warnings,
     createdAt: r.createdAt.toISOString(),
   };
@@ -575,4 +632,31 @@ async function sampleCpu(ms: number): Promise<number | null> {
   const total = b.total - a.total;
   if (total <= 0) return null;
   return round(((total - (b.idle - a.idle)) / total) * 100);
+}
+
+/** Puts the jobs a device was running back in the queue, for another worker. */
+export async function requeueJobsOf(tx: Tx, d: DeviceRow, why: string): Promise<number> {
+  const moved = await tx
+    .update(workerJobs)
+    .set({
+      status: 'queued',
+      deviceId: null,
+      leaseExpiresAt: null,
+      progress: 0,
+      progressNote: null,
+      excludedDeviceIds: sql`array_append(${workerJobs.excludedDeviceIds}, ${d.id}::uuid)`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(workerJobs.deviceId, d.id), eq(workerJobs.status, 'running')))
+    .returning({ id: workerJobs.id });
+  for (const j of moved)
+    await tx.insert(schema.workerJobLogs).values({
+      id: uuidv7(),
+      tenantId: d.tenantId,
+      jobId: j.id,
+      deviceId: d.id,
+      level: 'warning',
+      message: `${why} (${d.name}), chuyển việc về hàng đợi cho Worker khác`,
+    });
+  return moved.length;
 }
