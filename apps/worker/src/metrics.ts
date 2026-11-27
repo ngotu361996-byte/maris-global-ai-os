@@ -3,7 +3,7 @@ import { readFile, statfs } from 'node:fs/promises';
 import os from 'node:os';
 import type { DeviceGpu, DeviceInfo, Heartbeat } from '@maris/contracts';
 
-export const AGENT_VERSION = '0.15.0';
+export const AGENT_VERSION = '0.18.0';
 
 const round = (n: number) => Math.round(n * 100) / 100;
 

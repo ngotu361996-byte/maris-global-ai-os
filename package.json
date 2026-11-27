@@ -25,6 +25,9 @@
   "pnpm": {
     "overrides": {
       "postcss": "8.5.33"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "sharp"
+    ]
   }
 }

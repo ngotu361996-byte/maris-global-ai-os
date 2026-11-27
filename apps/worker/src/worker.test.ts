@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { heartbeatSchema } from '@maris/contracts';
+import { heartbeatSchema, workerJobInputSchemas } from '@maris/contracts';
 import { normalizeServer } from './config';
 import { cpuPercent, parseNvidiaSmi, Sampler } from './metrics';
+
+const noFiles = {
+  download: () => Promise.reject(new Error('không có tệp')),
+  upload: () => Promise.reject(new Error('không gửi tệp')),
+};
 
 test('parses nvidia-smi output, keeping unreadable values as null', () => {
   const gpus = parseNvidiaSmi(
@@ -56,6 +61,7 @@ test('the test job counts, reports progress, fails on request and stops when tol
     server: 'http://127.0.0.1:9',
     timeoutSec: 60,
     report: (p?: number) => reports.push(p),
+    ...noFiles,
   });
   assert.deepEqual(await HANDLERS['test.wait']({ seconds: 1 }, ctx(new AbortController().signal)), {
     waitedSec: 1,
@@ -83,6 +89,7 @@ test('the machine check reports this machine and never fails when MARIS or a GPU
       server: 'http://127.0.0.1:9',
       timeoutSec: 60,
       report: () => {},
+      ...noFiles,
     },
   )) as { hostname: string; ram: { totalMb: number }; latencyMs: number | null; gpus: unknown[] };
   assert.equal(typeof r.hostname, 'string');
@@ -161,4 +168,149 @@ test('code runs in Docker, gets its stdin, has no network and is stopped at its 
   );
   assert.ok(slow.timedOut);
   assert.equal(slow.exitCode, null);
+});
+
+test('image jobs make each size, place the logo, strip location data and refuse SVG', async () => {
+  const { loadSharp, renderImage } = await import('./image');
+  const { HANDLERS, capabilities, JobError } = await import('./jobs');
+  const sharp = await loadSharp();
+  assert.ok(sharp, 'sharp loads on this machine');
+  assert.ok((await capabilities({ allowCode: false })).includes('media.image'));
+
+  // A 3000×2000 photo, rotated by its EXIF tag, with a GPS-like comment; and a red square logo.
+  const photo = await sharp({
+    create: { width: 3000, height: 2000, channels: 3, background: '#2050a0' },
+  })
+    .jpeg()
+    .withMetadata({ orientation: 6, exif: { IFD0: { ImageDescription: 'GPS 10.77,106.70' } } })
+    .toBuffer();
+  const logo = await sharp({
+    create: { width: 200, height: 200, channels: 4, background: '#ff0000ff' },
+  })
+    .png()
+    .toBuffer();
+  const input = workerJobInputSchemas['media.image'].parse({
+    assetId: '00000000-0000-7000-8000-000000000001',
+    logoAssetId: '00000000-0000-7000-8000-000000000002',
+    presets: ['feed_square', 'story', 'original'],
+    logo: { position: 'top-left', sizePct: 10, opacity: 0.5, marginPct: 0 },
+    format: 'png',
+  });
+
+  const square = await renderImage(sharp, photo, logo, 'feed_square', input);
+  assert.deepEqual([square.width, square.height, square.ext], [1080, 1080, 'png']);
+  const m = await sharp(square.data).metadata();
+  assert.deepEqual([m.width, m.height, m.orientation, m.exif], [1080, 1080, undefined, undefined]);
+  // The logo is 108 px wide at the top left, half transparent over the blue photo.
+  const { data, info } = await sharp(square.data).raw().toBuffer({ resolveWithObject: true });
+  const px = (x: number, y: number) => {
+    const i = (y * info.width + x) * info.channels;
+    return [data[i]!, data[i + 1]!, data[i + 2]!];
+  };
+  const near = (a: number[], b: number[], d: number) => a.every((v, i) => Math.abs(v - b[i]!) <= d);
+  // Half red over #2050a0 is about (144, 40, 80).
+  assert.ok(near(px(50, 50), [144, 40, 80], 6), `logo pixel ${px(50, 50)}`);
+  assert.ok(near(px(200, 200), [32, 80, 160], 3), `photo pixel ${px(200, 200)}`);
+
+  // The photo is upright (portrait) at its own size when "original" is chosen.
+  const original = await renderImage(sharp, photo, null, 'original', { ...input, format: 'jpeg' });
+  assert.deepEqual([original.width, original.height, original.ext], [2000, 3000, 'jpg']);
+  const fitted = await renderImage(sharp, photo, null, 'landscape', {
+    ...input,
+    fit: 'contain',
+    background: '#00ff00',
+    format: 'webp',
+  });
+  assert.deepEqual([fitted.width, fitted.height, fitted.ext], [1920, 1080, 'webp']);
+  assert.equal((await sharp(fitted.data).metadata()).format, 'webp');
+
+  // Auto-level widens a dull image's tones around its own brightness and leaves a full range alone.
+  const halves = await sharp({
+    create: { width: 300, height: 200, channels: 3, background: '#7a7a7a' },
+  })
+    .composite([
+      {
+        input: await sharp({
+          create: { width: 150, height: 200, channels: 3, background: '#9a9a9a' },
+        })
+          .png()
+          .toBuffer(),
+        left: 0,
+        top: 0,
+      },
+    ])
+    .png()
+    .toBuffer();
+  const levelled = await renderImage(sharp, halves, null, 'original', {
+    ...input,
+    autoLevel: true,
+  });
+  const [lv] = (await sharp(levelled.data).stats()).channels;
+  assert.ok(
+    lv!.max - lv!.min > 32 + 8 && Math.abs((lv!.max + lv!.min) / 2 - 138) <= 2,
+    `${lv!.min}-${lv!.max}`,
+  );
+  const full = await sharp({ create: { width: 2, height: 1, channels: 3, background: '#000' } })
+    .composite([
+      {
+        input: Buffer.from([255, 255, 255]),
+        raw: { width: 1, height: 1, channels: 3 },
+        left: 1,
+        top: 0,
+      },
+    ])
+    .png()
+    .toBuffer();
+  const same = await renderImage(sharp, full, null, 'original', { ...input, autoLevel: true });
+  assert.deepEqual(
+    [...(await sharp(same.data).removeAlpha().raw().toBuffer())],
+    [0, 0, 0, 255, 255, 255],
+  );
+
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+  await assert.rejects(renderImage(sharp, svg, null, 'thumbnail', input), /không hỗ trợ/);
+
+  // The handler fetches only the job's files and sends one image per size.
+  const fetched: string[] = [];
+  const sent: string[] = [];
+  const result = (await HANDLERS['media.image'](
+    { ...input, presets: ['thumbnail', 'feed_portrait'] },
+    {
+      signal: new AbortController().signal,
+      server: 'http://127.0.0.1:9',
+      timeoutSec: 600,
+      report: () => {},
+      download: async (id) => {
+        fetched.push(id);
+        return id === input.assetId ? photo : logo;
+      },
+      upload: async (preset, name) => {
+        sent.push(name);
+        return { itemId: `item-${preset}` };
+      },
+    },
+  )) as { outputs: { preset: string; itemId: string; width: number; height: number }[] };
+  assert.deepEqual(fetched, [input.assetId, input.logoAssetId]);
+  assert.deepEqual(sent, ['thumbnail-1280x720.png', 'feed_portrait-1080x1350.png']);
+  assert.deepEqual(
+    result.outputs.map((o) => [o.preset, o.itemId, o.width, o.height]),
+    [
+      ['thumbnail', 'item-thumbnail', 1280, 720],
+      ['feed_portrait', 'item-feed_portrait', 1080, 1350],
+    ],
+  );
+  await assert.rejects(
+    HANDLERS['media.image'](
+      { ...input, logoAssetId: null },
+      {
+        signal: new AbortController().signal,
+        server: 'http://127.0.0.1:9',
+        timeoutSec: 600,
+        report: () => {},
+        download: async () => svg,
+        upload: async () => ({ itemId: 'x' }),
+      },
+    ),
+    (e: unknown) => e instanceof JobError && e.code === 'MEDIA_IMAGE_INVALID',
+  );
 });

@@ -125,6 +125,13 @@ phiên bản mới (`ai_task_id`) và chạy `factWarnings` so với `content.ge
 cầu, tiêu đề). Cảnh báo của phiên bản hiện tại chặn duyệt. Việc AI viết nội dung không chạy lại được; tạm dừng hay Dừng
 khẩn cấp sẽ kết thúc lượt viết.
 
+Xử lý ảnh (Sprint 18): `ContentMediaService` kiểm tra ảnh và logo (loại, quyền, cỡ) rồi tạo việc Worker `media.image`
+qua `WorkerJobsService.createIn(..., { internal: true })` trong cùng transaction với audit. Worker (`apps/worker/src/image.ts`,
+thư viện sharp) chỉ tải được ảnh và logo ghi trong việc, khi chính máy đó đang chạy việc (`runningJob`), và gửi từng ảnh
+kết quả lên `agent/jobs/:id/outputs`. Máy chủ nhận dạng lại tệp, khóa việc (`lockRunningIn`), tạo thành phẩm và phiên bản
+có `worker_job_id`, ghi `content.media_outputs` (duy nhất theo việc và cỡ ảnh) và audit, với người tạo việc là người thực
+hiện.
+
 
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

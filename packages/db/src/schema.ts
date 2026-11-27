@@ -966,8 +966,19 @@ export const contentItemVersions = content.table('item_versions', {
   skillVersion: text('skill_version'),
   workflowRunId: uuid('workflow_run_id'),
   aiTaskId: uuid('ai_task_id'),
+  workerJobId: uuid('worker_job_id'),
   note: text('note'),
   createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+/** One output image of a media.image worker job (one per job and size). */
+export const contentMediaOutputs = content.table('media_outputs', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  jobId: uuid('job_id').notNull(),
+  preset: text('preset').notNull(),
+  itemId: uuid('item_id').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 

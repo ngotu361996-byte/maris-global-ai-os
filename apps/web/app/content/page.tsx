@@ -17,6 +17,7 @@ import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
+import { ImageProcessor } from './ImageProcessor';
 
 const RIGHTS_CLS: Record<RightsStatus, string> = {
   owned: 'border-green-600 text-green-500',
@@ -624,6 +625,17 @@ export default function ContentSourcePage() {
                     ))}
                   </ul>
                 </div>
+              )}
+              {selected.kind === 'image' && selected.file && (
+                <ImageProcessor
+                  key={selected.id}
+                  asset={selected}
+                  onDone={(m) => {
+                    setError(null);
+                    setOk(m);
+                  }}
+                  onError={fail}
+                />
               )}
               {selected.body && (
                 <pre className="mb-3 max-h-60 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-bg p-2 text-sm">

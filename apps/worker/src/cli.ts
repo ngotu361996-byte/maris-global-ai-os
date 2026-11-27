@@ -16,7 +16,8 @@ const HELP = `MARIS Worker ${AGENT_VERSION}
   status                                             Xem máy này đã ghép nối với đâu
 
 Worker chỉ kết nối ra máy chủ MARIS. Nó không mở cổng và không chạy lệnh nào từ máy chủ:
-nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, việc thử).
+nó chỉ làm các loại việc có sẵn trong chương trình (kiểm tra máy, AI cục bộ qua Ollama, xử lý ảnh,
+việc thử). Việc xử lý ảnh chỉ tải được đúng ảnh và logo của việc đó, khi máy này đang làm việc đó.
 Mã chỉ chạy khi chủ máy thêm --allow-code, và luôn chạy trong container Docker không mạng,
 không ghi được đĩa của máy, giới hạn RAM, CPU và thời gian.`;
 

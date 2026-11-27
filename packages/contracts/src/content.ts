@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { workerJobInputSchemas, type ImagePreset, type WorkerJobStatus } from './worker-jobs';
 
 /**
  * Content libraries (spec Part 11): the source library (M09) keeps original files, product facts and
@@ -382,6 +383,8 @@ export interface VersionResponse {
   aiTaskId: string | null;
   /** Numbers or claims in an AI-written version that its facts do not support. */
   aiWarnings: string[];
+  /** The Media Worker job that made this version's file. */
+  workerJobId: string | null;
   note: string | null;
   createdByName: string;
   createdAt: string;
@@ -526,4 +529,43 @@ export interface GenerationResponse {
   createdByName: string;
   createdAt: string;
   finishedAt: string | null;
+}
+
+// ------------------------------------------------------------------------- image processing
+
+/**
+ * Image processing on a Media Worker (spec Part 13 and Part 26): one source image becomes one new
+ * image item per chosen size, each with a first version that names the image (and logo) it came
+ * from, so it is approved like any other content. The image's rights are checked before any work
+ * is queued.
+ */
+export const processImageSchema = workerJobInputSchemas['media.image']
+  .omit({ assetId: true })
+  .extend({
+    /** Only this worker; null lets any worker that can process images take it. */
+    targetDeviceId: z.uuid().nullable().default(null),
+  });
+export type ProcessImage = z.input<typeof processImageSchema>;
+
+export interface MediaJobResponse {
+  id: string;
+  title: string;
+  status: WorkerJobStatus;
+  progress: number;
+  progressNote: string | null;
+  presets: ImagePreset[];
+  logoAssetId: string | null;
+  deviceName: string | null;
+  errorMessage: string | null;
+  cancelRequested: boolean;
+  createdByName: string;
+  createdAt: string;
+  finishedAt: string | null;
+  outputs: { preset: ImagePreset; itemId: string; title: string; status: ItemStatus }[];
+}
+
+export interface MediaJobsResponse {
+  jobs: MediaJobResponse[];
+  /** Workers that say they can process images now. */
+  workers: { id: string; name: string; online: boolean }[];
 }
