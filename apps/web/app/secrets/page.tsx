@@ -27,6 +27,14 @@ export default function SecretsPage() {
     e.preventDefault();
     const form = e.currentTarget;
     const f = new FormData(form);
+    const name = String(f.get('name')).trim();
+    const value = String(f.get('value')).trim();
+    // Catches the common slip of typing the key's name into the value box.
+    if (value === name || /^[a-z0-9_.-]+\.(api_key|key|token)$/i.test(value)) {
+      setOk(null);
+      setError('Ô “Giá trị” đang chứa tên key, không phải key thật. Dán key (ví dụ bắt đầu bằng sk-) vào ô Giá trị.');
+      return;
+    }
     setError(null);
     setOk(null);
     setBusy(true);
