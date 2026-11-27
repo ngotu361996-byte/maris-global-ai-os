@@ -49,7 +49,7 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
         </button>
         <button
           disabled
-          title="Dừng khẩn cấp: kích hoạt ở Sprint 4 cùng Structured Task. Muốn dừng một câu trả lời đang chạy, bấm Dừng trong khung chat."
+          title="Dừng khẩn cấp: kích hoạt ở Sprint 5 cùng Structured Task. Muốn dừng một câu trả lời đang chạy, bấm Dừng trong khung chat."
           className="rounded-md border border-danger px-2 py-1 text-xs text-danger opacity-60"
         >
           Dừng khẩn cấp
@@ -116,7 +116,7 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
       {/* Drawer dưới */}
       <section className="overflow-y-auto border-t border-line bg-panel p-3 text-xs text-muted max-md:hidden" aria-label="Công việc đang chạy">
         <div className="mb-1 font-medium text-ink">Công việc đang chạy</div>
-        Không có công việc nào. Giao việc có phê duyệt và tiến độ thời gian thực bật ở Sprint 4.
+        Không có công việc nào. Giao việc có phê duyệt và tiến độ thời gian thực bật ở Sprint 5.
       </section>
     </div>
   );

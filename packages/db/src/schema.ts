@@ -175,6 +175,9 @@ export const aiConversations = ai.table('conversations', {
   title: text('title').notNull(),
   providerId: uuid('provider_id'),
   model: text('model'),
+  agentId: uuid('agent_id'),
+  projectId: uuid('project_id'),
+  mode: text('mode').$type<'chat' | 'research' | 'command' | 'expert' | 'coding' | 'monitor' | 'software'>().notNull().default('chat'),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   deletedAt: ts('deleted_at'),
@@ -211,4 +214,57 @@ export const aiProviderCalls = ai.table('provider_calls', {
   costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
   latencyMs: integer('latency_ms'),
   createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const aiAgents = ai.table('agents', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  name: text('name').notNull(),
+  role: text('role').notNull(),
+  systemPrompt: text('system_prompt').notNull(),
+  evalCriteria: text('eval_criteria'),
+  providerId: uuid('provider_id'),
+  model: text('model'),
+  status: text('status').$type<'active' | 'paused'>().notNull().default('active'),
+  templateKey: text('template_key'),
+  version: integer('version').notNull().default(1),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const aiAgentVersions = ai.table('agent_versions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  agentId: uuid('agent_id').notNull(),
+  version: integer('version').notNull(),
+  config: jsonb('config').$type<Record<string, unknown>>().notNull(),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const aiProjects = ai.table('projects', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export const aiMemories = ai.table('memories', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  pinned: boolean('pinned').notNull().default(false),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
 });

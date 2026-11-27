@@ -1,12 +1,12 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 3)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 4)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
-| 3. AI Central Command | Sprint 3 (AI Gateway, Router, Chat) đang review; Sprint 4 chưa bắt đầu |
+| 3. AI Central Command | Sprint 3 (AI Gateway, Router, Chat) đã merge; Sprint 4 (Agent, chế độ chat, bộ nhớ dự án) đang review; Sprint 5 chưa bắt đầu |
 | 4–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -47,9 +47,17 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 - Token và chi phí: ghi mỗi lượt gọi (kể cả lỗi) vào `ai.provider_calls`, giá theo USD/1 triệu token do người dùng nhập; `GET /api/v1/ai/usage`
 - Web: `/chat`, `/ai` (AI Provider), khung AI Chat bên phải mọi trang
 
-## Sprint 4 (dự kiến, Giai đoạn 3)
+## Sprint 4 – AI Agent, chế độ chat, bộ nhớ dự án (Giai đoạn 3)
 
-- AI Agent (cấu hình độc lập), chế độ chat (Trao đổi, Nghiên cứu, Điều hành…)
-- Bộ nhớ theo dự án, Structured Task có phê duyệt, Dừng khẩn cấp
-- Cost Governor: ngân sách theo Provider/Tenant, cảnh báo 80%, Capability/Model Registry
+- Migration `0004`: `ai.agents` + `ai.agent_versions` (mỗi lần sửa lưu một phiên bản), `ai.projects`, `ai.memories`, cột `agent_id` / `project_id` / `mode` cho hội thoại; quyền mới `ai.memory` (owner, administrator, manager)
+- AI Agent: tên, vai trò, prompt, Provider/Model riêng, tiêu chí đánh giá, trạng thái, phiên bản. 34 Agent mẫu theo Phần 09 cài bằng một nút (chạy lại không tạo trùng)
+- Chế độ chat: Trao đổi, Nghiên cứu, Điều hành, Chuyên gia, Lập trình, Giám sát, Phát triển phần mềm
+- Bộ nhớ dự án lưu trong MARIS (không phụ thuộc AI Provider), mục ghim đọc trước, tối đa 16.000 ký tự mỗi lượt; được rào trong `<project_memory>` và luôn đứng sau quy tắc an toàn của MARIS
+- Thứ tự chọn AI: Provider chọn trong hội thoại > Provider của Agent > thứ tự dự phòng
+- Web: `/agents`, `/memory`; chọn Agent, chế độ, dự án trong Chat; câu trả lời hiển thị chữ đậm, danh sách, mã (không chèn HTML thô)
+
+## Sprint 5 (dự kiến, Giai đoạn 3)
+
+- Structured Task có phê duyệt, tạm dừng, hủy, Dừng khẩn cấp; Hội đồng AI
+- Cost Governor: ngân sách theo Provider/Tenant/Agent, cảnh báo 80%, Capability/Model Registry
 - Tải tệp, giọng nói

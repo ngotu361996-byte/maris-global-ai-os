@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CHAT_MODES, type ChatMode } from './chat-modes';
 
 export const AI_PROVIDER_KINDS = ['openai', 'anthropic', 'gemini', 'ollama', 'openai_compatible'] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
@@ -13,7 +14,7 @@ export const AI_PROVIDER_PRESETS: Record<AiProviderKind, { label: string; defaul
 };
 
 /** A model name, never a key: catches a key pasted into the model box before it is stored in plain text. */
-const modelName = z
+export const modelName = z
   .string()
   .trim()
   .min(1)
@@ -96,6 +97,9 @@ export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   providerId: z.string().uuid().nullable().optional(),
   model: modelName.nullable().optional(),
+  agentId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  mode: z.enum(CHAT_MODES).optional(),
 });
 export type CreateConversation = z.infer<typeof createConversationSchema>;
 
@@ -104,6 +108,9 @@ export const updateConversationSchema = z
     title: z.string().trim().min(1).max(200),
     providerId: z.string().uuid().nullable(),
     model: modelName.nullable(),
+    agentId: z.string().uuid().nullable(),
+    projectId: z.string().uuid().nullable(),
+    mode: z.enum(CHAT_MODES),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'không có gì để cập nhật');
@@ -122,6 +129,9 @@ export interface ConversationResponse {
   title: string;
   providerId: string | null;
   model: string | null;
+  agentId: string | null;
+  projectId: string | null;
+  mode: ChatMode;
   createdAt: string;
   updatedAt: string;
 }
