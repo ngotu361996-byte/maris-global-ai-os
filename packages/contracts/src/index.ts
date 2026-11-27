@@ -17,3 +17,4 @@ export * from './skills';
 export * from './workflows';
 export * from './connectors';
 export * from './plugins';
+export * from './devices';

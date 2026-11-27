@@ -1,14 +1,15 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 12, nghiệm thu)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 13)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
-| 4. Skills, Workflow, Connector, Plugin | Sprint 9–11 đã merge; Sprint 12 (Trung tâm Plugin, Extension SDK) đang review. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
-| 5–14 | Chưa bắt đầu |
+| 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
+| 5. Hạ tầng | Sprint 13 (thiết bị, Worker, theo dõi tài nguyên) đang review; Sprint 14 (phân việc cho Worker), Sprint 15 (sandbox chạy mã) |
+| 6–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
 
@@ -129,7 +130,19 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 12 – Trung tâm Plugin và Extension SDK (Giai đoạn 4)
+## Sprint 13 – Thiết bị và Worker (Giai đoạn 5)
+
+- Migration `0013`: schema `infra` với `devices`, `device_metrics`, `device_events` (RLS theo tenant); quyền `infra.read`, `infra.manage` cho owner và administrator
+- Loại thiết bị theo đặc tả Phần 26: VPS điều hành trung tâm, máy quản trị, máy nhân viên, GPU Worker, Media Worker, AI Local Worker, Code Runner
+- Ghép nối: người quản trị tạo thiết bị và nhận chuỗi ghép nối `maris1.…`, dùng một lần, hết hạn sau 30 phút. Worker đổi chuỗi lấy khóa thiết bị. Chỉ lưu SHA-256 của chuỗi và khóa, so bằng `timingSafeEqual`. Bộ cài không chứa tài khoản quản trị
+- Worker (`apps/worker`, lệnh `pnpm worker pair|run|status`): chỉ kết nối ra máy chủ, không mở cổng, không nhận lệnh. Báo CPU, RAM, ổ đĩa, GPU NVIDIA (qua `nvidia-smi` nếu có), nhiệt độ CPU (Linux) mỗi 15 giây. Từ chối `http://` tới máy chủ ngoài mạng nội bộ. Khóa lưu ở `~/.maris-worker/config.json` (chỉ người dùng hiện tại đọc được)
+- API Worker không cần phiên đăng nhập: `POST /agent/pair` (10 lần/phút mỗi IP), `POST /agent/heartbeat` với `X-Maris-Device` (240 lần/phút mỗi IP). Câu trả lời chỉ có trạng thái thiết bị
+- Trực tuyến khi có nhịp báo trong 45 giây. Cảnh báo: ổ đĩa ≥ 90%, RAM ≥ 95%, GPU ≥ 85°C, CPU ≥ 90°C, mất kết nối. Nhật ký sự kiện: ghép nối, cảnh báo mới, kết nối lại, tạm dừng, thu hồi. Chỉ số giữ 24 giờ
+- Tạm dừng / chạy lại (thiết bị tạm dừng vẫn báo nhưng sẽ không nhận việc ở Sprint 14), chuỗi ghép nối mới (khóa cũ hết hiệu lực khi dùng), thu hồi khóa (Worker tự dừng), đổi tên, xóa. Mọi thao tác ghi audit
+- Trang `/infra` (mục M31): tình trạng máy chủ MARIS, danh sách thiết bị với CPU/RAM/ổ đĩa/GPU, biểu đồ 60 phút, sự kiện, cảnh báo
+- Giới hạn: chưa phân việc cho Worker (Sprint 14), chưa có sandbox chạy mã (Sprint 15); GPU chỉ đọc được NVIDIA; chưa có bộ cài Worker đóng gói sẵn (chạy từ thư mục mã nguồn)
+
+## Sprint 12 – Trung tâm Plugin và Extension SDK (Giai đoạn 4, đã merge)
 
 - Migration `0012`: schema `ext` với `plugins`, `plugin_versions`, `plugin_components`, `trusted_publishers` (RLS theo tenant)
 - Plugin (định dạng `maris.plugin/v1`) là một gói Skill, Connector và Workflow với một bản khai đủ các mục đặc tả Phần 23: mã, tên, phiên bản, mô tả, tác giả, quyền, phụ thuộc (khoảng phiên bản `*`, `1.2.3`, `>=1.2.3`, `^1.2.3`), tương thích MARIS, ngân sách tối đa mỗi lần chạy, thời gian tối đa, checksum, chữ ký Ed25519 và bộ bài kiểm tra. Ô nhập và kết quả là của từng thành phần
