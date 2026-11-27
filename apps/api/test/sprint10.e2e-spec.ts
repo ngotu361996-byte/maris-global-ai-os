@@ -479,7 +479,10 @@ describe('Sprint 10 (e2e): Workflow Studio', () => {
       expect(broke).toMatchObject({ status: 'failed', errorCode: 'WORKFLOW_BUDGET_EXCEEDED' });
       expect(
         broke.steps.filter((s: any) => s.nodeId === 'viet' && s.status === 'completed'),
-      ).toHaveLength(3);
+      ).toHaveLength(8);
+      // Steps 4 to 8 ran on less than their $0.02 budget: each gets what the run has left, and the
+      // run stops once under $0.01 is left ($0.025 - 8 × $0.002 = $0.009).
+      expect(broke.errorMessage).toContain('$0.0090');
       expect(broke.costUsd).toBeLessThanOrEqual(0.025);
     });
 

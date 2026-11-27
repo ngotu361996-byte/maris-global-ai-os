@@ -1096,6 +1096,10 @@ function RunForm({
             defaultValue="1"
             className={`${inputCls} mt-1 max-w-xs`}
           />
+          <span className="mt-1 block text-xs text-muted">
+            Đây là mức trần của cả lần chạy. Mỗi bước AI được dùng tới ngân sách riêng của bước,
+            nhưng không quá phần còn lại. Bấm “Chạy thử” để xem mức tốn tối đa.
+          </span>
         </label>
         <div className="flex flex-wrap gap-2">
           <button

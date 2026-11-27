@@ -561,7 +561,10 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
     state: RunState,
     spent: number,
   ): Promise<{ row: TaskRow; input: string }> {
-    const remaining = Number(run.budgetUsd) - spent;
+    // The run budget is the ceiling: a step gets its own budget, cut down to what the run has left.
+    const remaining = Math.floor((Number(run.budgetUsd) - spent) * 10_000) / 10_000;
+    if (remaining < MIN_STEP_BUDGET_USD) throw budgetError(node.label, remaining);
+    const capped = (budget: number) => Math.min(budget, remaining);
     let agentId: string | null = null;
     if (node.agentKey) {
       const [agent] = await tx
@@ -583,14 +586,13 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
     const wf = await this.workflows.row(tx, run.tenantId, run.workflowId).catch(() => null);
     const origin = { runId: run.id, nodeId: node.id };
     if (node.type === 'ai') {
-      if (node.budgetUsd > remaining) throw budgetError(node.label, node.budgetUsd, remaining);
       const prompt = renderForAi(node.prompt, state);
       const row = await this.tasks.insert(tx, ctx, {
         title: `${wf?.name ?? 'Workflow'}: ${node.label}`.slice(0, 200),
         goal: `Bước "${node.label}" của Workflow "${wf?.name ?? ''}"`.slice(0, 4000),
         scope: 'Làm đúng hướng dẫn của bước; chỉ soạn văn bản.',
         successCriteria: 'Trả lời đúng yêu cầu của bước.',
-        budgetUsd: node.budgetUsd,
+        budgetUsd: capped(node.budgetUsd),
         agentId,
         requiredLevel: node.requiredLevel as TaskLevel,
         timeoutSec: node.timeoutSec,
@@ -618,13 +620,13 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
     );
     const inputs = checkInputs(skill.manifest.inputs, rendered);
     const body = skillTaskBody(skill, inputs, agentId, null);
-    if (body.budgetUsd > remaining) throw budgetError(node.label, body.budgetUsd, remaining);
     if (agentId) {
       const [agent] = await tx.select().from(aiAgents).where(eq(aiAgents.id, agentId));
       assertLevel(agent!, body.requiredLevel);
     }
     const row = await this.tasks.insert(tx, ctx, {
       ...body,
+      budgetUsd: capped(body.budgetUsd),
       workflow: origin,
       approvedBy: run.startedBy,
     });
@@ -792,10 +794,13 @@ export class WorkflowRunsService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-function budgetError(label: string, needs: number, remaining: number): StepError {
+/** Below this a step cannot do useful AI work, so the run stops instead. */
+const MIN_STEP_BUDGET_USD = 0.01;
+
+function budgetError(label: string, remaining: number): StepError {
   return new StepError(
     'WORKFLOW_BUDGET_EXCEEDED',
-    `Bước "${label}" cần $${needs}, ngân sách lần chạy chỉ còn $${Math.max(0, remaining).toFixed(4)}`,
+    `Hết ngân sách trước bước "${label}": lần chạy chỉ còn $${Math.max(0, remaining).toFixed(4)}, mỗi bước AI cần ít nhất $${MIN_STEP_BUDGET_USD}`,
   );
 }
 
