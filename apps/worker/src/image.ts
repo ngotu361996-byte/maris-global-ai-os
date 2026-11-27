@@ -5,7 +5,7 @@ import {
   type WorkerJobInput,
 } from '@maris/contracts';
 
-type Sharp = typeof import('sharp');
+type Sharp = (typeof import('sharp'))['default'];
 export type ImageInput = WorkerJobInput<'media.image'>;
 
 /** Formats the worker reads. SVG and the rest are refused, whatever the server sent. */
