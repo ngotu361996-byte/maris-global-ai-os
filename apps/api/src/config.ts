@@ -23,6 +23,11 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   AI_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
+  // Runs approved AI tasks from the maris-tasks queue in this process.
+  AI_TASK_WORKER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   NODE_ENV: z.string().default('development'),
 });
 

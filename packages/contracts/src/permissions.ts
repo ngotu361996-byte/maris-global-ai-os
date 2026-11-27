@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   'ai.chat',
   'ai.manage',
   'ai.memory',
+  'ai.approve',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];

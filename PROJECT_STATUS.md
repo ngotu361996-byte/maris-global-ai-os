@@ -1,12 +1,12 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 4)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 5)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
-| 3. AI Central Command | Sprint 3 (AI Gateway, Router, Chat) đã merge; Sprint 4 (Agent, chế độ chat, bộ nhớ dự án) đang review; Sprint 5 chưa bắt đầu |
+| 3. AI Central Command | Sprint 3, 4 đã merge; Sprint 5 (Structured Task, Dừng khẩn cấp, ngân sách) đang review; Sprint 6 chưa bắt đầu |
 | 4–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -56,8 +56,17 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 - Thứ tự chọn AI: Provider chọn trong hội thoại > Provider của Agent > thứ tự dự phòng
 - Web: `/agents`, `/memory`; chọn Agent, chế độ, dự án trong Chat; câu trả lời hiển thị chữ đậm, danh sách, mã (không chèn HTML thô)
 
-## Sprint 5 (dự kiến, Giai đoạn 3)
+## Sprint 5 – Giao việc có phê duyệt, Dừng khẩn cấp, Cost Governor (Giai đoạn 3)
 
-- Structured Task có phê duyệt, tạm dừng, hủy, Dừng khẩn cấp; Hội đồng AI
-- Cost Governor: ngân sách theo Provider/Tenant/Agent, cảnh báo 80%, Capability/Model Registry
-- Tải tệp, giọng nói
+- Migration `0005`: `ai.tasks`, `ai.budgets`, `ai.controls`, cột `task_id` cho `ai.provider_calls`; quyền mới `ai.approve` (owner, administrator)
+- Structured Task: mục tiêu, phạm vi, quyền hạn (hiện chỉ `ai.generate_text`), ngân sách USD, tiêu chí hoàn thành, Agent, dự án. Chờ duyệt → duyệt → chạy trên hàng đợi BullMQ `maris-tasks` → hoàn thành / lỗi. Tạm dừng, chạy tiếp (cần `ai.approve`), hủy (người tạo hoặc người duyệt). Lấy công việc bằng `UPDATE … WHERE status='queued'` nên job trùng không chạy hai lần
+- Dừng khẩn cấp: ai có `ai.chat` đều bấm được; chặn chat (HTTP 423) và duyệt việc, ngắt câu trả lời và công việc đang chạy trong khoảng 0,5 giây (cờ Redis), chuyển việc đang mở sang tạm dừng; chỉ `ai.approve` bật lại
+- Cost Governor: ngân sách tháng (UTC) cho toàn tenant hoặc từng Provider; 80% gửi sự kiện `ai.budget.threshold_reached` một lần mỗi tháng; Provider hết ngân sách bị bỏ qua (chuyển AI dự phòng); tenant hết ngân sách thì chặn mọi AI (HTTP 402)
+- Web: `/tasks`, nút “Giao việc” dưới câu trả lời trong chat, thanh Công việc đang chạy cập nhật mỗi 5 giây, nút Dừng khẩn cấp, ô ngân sách trên trang AI Provider
+- Giới hạn: ngân sách của một công việc được kiểm tra trước mỗi lần chạy (một lần chạy có thể vượt một chút); nếu API dừng giữa lúc duyệt và lúc đưa vào hàng đợi, công việc nằm ở “chờ chạy” cho tới khi bấm Tạm dừng rồi Chạy tiếp
+
+## Sprint 6 (dự kiến, Giai đoạn 3)
+
+- Hội đồng AI (nhiều AI phân tích, phản biện, tổng hợp)
+- Capability/Model Registry
+- Tải hình ảnh, video, tài liệu (cần MinIO); nhập liệu bằng giọng nói

@@ -7,3 +7,4 @@ export * from './secrets';
 export * from './ai';
 export * from './chat-modes';
 export * from './agents';
+export * from './tasks';

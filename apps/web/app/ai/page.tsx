@@ -10,6 +10,7 @@ import {
   type AiUsageResponse,
   type SecretResponse,
 } from '@maris/contracts';
+import { BudgetsPanel } from '@/components/BudgetsPanel';
 import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -317,6 +318,8 @@ export default function AiProvidersPage() {
         </form>
       </Panel>
 
+      <BudgetsPanel providers={providers} />
+
       {usage && (
         <Panel title="Token và chi phí 30 ngày qua">
           {usage.rows.length === 0 ? (
@@ -352,7 +355,7 @@ export default function AiProvidersPage() {
               </tbody>
             </table>
           )}
-          <p className="mt-2 text-xs text-muted">Chi phí chỉ tính khi bạn nhập giá cho từng AI. Ngân sách và cảnh báo 80% có ở Sprint 5.</p>
+          <p className="mt-2 text-xs text-muted">Chi phí chỉ tính khi bạn nhập giá cho từng AI; ngân sách cũng chỉ có hiệu lực khi đã nhập giá.</p>
         </Panel>
       )}
     </Shell>

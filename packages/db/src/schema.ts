@@ -213,6 +213,7 @@ export const aiProviderCalls = ai.table('provider_calls', {
   outputTokens: integer('output_tokens'),
   costUsd: numeric('cost_usd', { precision: 14, scale: 6 }),
   latencyMs: integer('latency_ms'),
+  taskId: uuid('task_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 
@@ -267,4 +268,53 @@ export const aiMemories = ai.table('memories', {
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   deletedAt: ts('deleted_at'),
+});
+
+export type AiTaskStatus = 'pending' | 'rejected' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+
+export const aiTasks = ai.table('tasks', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  title: text('title').notNull(),
+  goal: text('goal').notNull(),
+  scope: text('scope').notNull(),
+  successCriteria: text('success_criteria').notNull(),
+  permissions: text('permissions').array().notNull(),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).notNull(),
+  agentId: uuid('agent_id'),
+  projectId: uuid('project_id'),
+  conversationId: uuid('conversation_id'),
+  status: text('status').$type<AiTaskStatus>().notNull().default('pending'),
+  progress: text('progress'),
+  approvedBy: uuid('approved_by'),
+  approvedAt: ts('approved_at'),
+  decisionNote: text('decision_note'),
+  result: text('result'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }).notNull().default('0'),
+  attempts: integer('attempts').notNull().default(0),
+  errorCode: text('error_code'),
+  startedAt: ts('started_at'),
+  finishedAt: ts('finished_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const aiBudgets = ai.table('budgets', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  providerId: uuid('provider_id'),
+  monthlyUsd: numeric('monthly_usd', { precision: 12, scale: 2 }).notNull(),
+  alertedMonth: text('alerted_month'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const aiControls = ai.table('controls', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  emergencyStop: boolean('emergency_stop').notNull().default(false),
+  reason: text('reason'),
+  changedBy: uuid('changed_by').notNull(),
+  changedAt: ts('changed_at').notNull().defaultNow(),
 });

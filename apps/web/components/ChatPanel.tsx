@@ -31,7 +31,12 @@ const ERROR_TEXT: Record<string, string> = {
   NO_PROVIDER: 'Chưa có AI nào được bật. Vào mục AI Provider để thêm.',
   ALL_PROVIDERS_FAILED: 'Tất cả AI đều lỗi. Kiểm tra key và trạng thái ở mục AI Provider.',
   CANCELLED: 'Đã dừng.',
+  EMERGENCY_STOP: 'MARIS đang Dừng khẩn cấp.',
+  BUDGET_EXCEEDED: 'Đã hết ngân sách AI.',
 };
+
+/** Hands a reply to the Giao việc page as a draft task (kept in this browser tab only). */
+export const TASK_DRAFT_KEY = 'maris.taskDraft';
 
 export function ChatPanel({ conversationId, onConversationChange, compact }: Props) {
   const [providers, setProviders] = useState<AiProviderResponse[]>([]);
@@ -304,6 +309,21 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
                   ]
                     .filter(Boolean)
                     .join(' · ')}
+                  {m.status === 'complete' && !compact && (
+                    <button
+                      onClick={() => {
+                        sessionStorage.setItem(
+                          TASK_DRAFT_KEY,
+                          JSON.stringify({ scope: m.content.slice(0, 4000), agentId: agentId || null, projectId: projectId || null, conversationId: convRef.current }),
+                        );
+                        window.location.href = '/tasks';
+                      }}
+                      className="ml-2 underline"
+                      title="Biến đề xuất này thành công việc cần phê duyệt"
+                    >
+                      Giao việc
+                    </button>
+                  )}
                 </div>
               )}
             </div>

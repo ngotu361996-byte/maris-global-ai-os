@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import type { MeResponse } from '@maris/contracts';
+import { TASK_STATUS_LABEL, type AiActivityResponse, type MeResponse } from '@maris/contracts';
 import { api, session } from '@/lib/api';
 import { NAV_GROUPS } from '@/lib/navigation';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -23,6 +23,44 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
   const [sideKey, setSideKey] = useState(0);
   const tenant = me.memberships[0];
   const canChat = !!tenant;
+  const [activity, setActivity] = useState<AiActivityResponse | null>(null);
+  const [stopError, setStopError] = useState<string | null>(null);
+
+  const loadActivity = useCallback(() => {
+    if (!tenant) return;
+    api<AiActivityResponse>('/ai/activity')
+      .then(setActivity)
+      .catch(() => undefined);
+  }, [tenant]);
+  useEffect(() => {
+    loadActivity();
+    const t = setInterval(loadActivity, 5000);
+    return () => clearInterval(t);
+  }, [loadActivity]);
+  const stopped = activity?.control.emergencyStop ?? false;
+
+  async function emergencyStop() {
+    const reason = prompt('Dừng khẩn cấp: mọi AI và công việc AI sẽ dừng ngay. Lý do (không bắt buộc):');
+    if (reason === null) return;
+    setStopError(null);
+    try {
+      await api('/ai/emergency-stop', { method: 'POST', body: JSON.stringify({ reason: reason.trim() || undefined }) });
+    } catch (e) {
+      setStopError(e instanceof Error ? e.message : 'Không dừng được');
+    }
+    loadActivity();
+  }
+
+  async function releaseStop() {
+    if (!confirm('Bật lại AI? Công việc đã tạm dừng vẫn ở trạng thái tạm dừng cho đến khi bạn cho chạy tiếp.')) return;
+    setStopError(null);
+    try {
+      await api('/ai/emergency-stop', { method: 'DELETE' });
+    } catch (e) {
+      setStopError(e instanceof Error ? e.message : 'Không bật lại được');
+    }
+    loadActivity();
+  }
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -47,13 +85,20 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
         <button onClick={toggleTheme} className="rounded-md border border-line px-2 py-1 text-xs">
           {theme === 'dark' ? 'Sáng' : 'Tối'}
         </button>
-        <button
-          disabled
-          title="Dừng khẩn cấp: kích hoạt ở Sprint 5 cùng Structured Task. Muốn dừng một câu trả lời đang chạy, bấm Dừng trong khung chat."
-          className="rounded-md border border-danger px-2 py-1 text-xs text-danger opacity-60"
-        >
-          Dừng khẩn cấp
-        </button>
+        {stopped ? (
+          <button onClick={releaseStop} className="rounded-md bg-danger px-2 py-1 text-xs font-medium text-white" title="Cần quyền phê duyệt">
+            Đang dừng khẩn cấp · Bật lại AI
+          </button>
+        ) : (
+          <button
+            onClick={emergencyStop}
+            disabled={!canChat}
+            title="Dừng ngay mọi AI và công việc AI của doanh nghiệp"
+            className="rounded-md border border-danger px-2 py-1 text-xs text-danger"
+          >
+            Dừng khẩn cấp
+          </button>
+        )}
         <button onClick={onLogout} className="text-xs text-muted underline">
           Đăng xuất
         </button>
@@ -86,7 +131,16 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
 
       {/* Khu giữa + sidebar phải */}
       <div className="flex min-h-0 overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6">
+          {(stopped || stopError) && (
+            <div role="alert" className="mb-4 rounded-md border border-danger p-3 text-sm text-danger">
+              {stopped
+                ? `MARIS đang Dừng khẩn cấp${activity?.control.reason ? ` (${activity.control.reason})` : ''}. Mọi AI và công việc AI đều dừng. Người có quyền phê duyệt bấm “Bật lại AI” ở góc trên.`
+                : stopError}
+            </div>
+          )}
+          {children}
+        </main>
         {!hideChat && canChat && chatOpen && (
           <aside className="flex w-80 flex-col border-l border-line bg-panel p-4 text-sm max-lg:hidden" aria-label="AI Chat">
             <div className="mb-2 flex items-center justify-between">
@@ -115,8 +169,31 @@ export function Shell({ me, children, hideChat }: { me: MeResponse; children: Re
 
       {/* Drawer dưới */}
       <section className="overflow-y-auto border-t border-line bg-panel p-3 text-xs text-muted max-md:hidden" aria-label="Công việc đang chạy">
-        <div className="mb-1 font-medium text-ink">Công việc đang chạy</div>
-        Không có công việc nào. Giao việc có phê duyệt và tiến độ thời gian thực bật ở Sprint 5.
+        <div className="mb-1 flex items-center gap-3 font-medium text-ink">
+          Công việc đang chạy
+          {activity && (
+            <Link href="/tasks" className="font-normal text-muted underline">
+              {activity.pending} chờ duyệt · {activity.queued} chờ chạy
+              {activity.budgetWarnings > 0 ? ` · ${activity.budgetWarnings} ngân sách sắp hết hoặc đã hết` : ''}
+            </Link>
+          )}
+        </div>
+        {activity?.running.length ? (
+          <ul className="space-y-1">
+            {activity.running.map((t) => (
+              <li key={t.id}>
+                <Link href="/tasks" className="text-ink">
+                  <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+                  {t.title}
+                </Link>{' '}
+                · {TASK_STATUS_LABEL[t.status]}
+                {t.progress ? ` · ${t.progress}` : ''}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          'Không có công việc nào đang chạy.'
+        )}
       </section>
     </div>
   );

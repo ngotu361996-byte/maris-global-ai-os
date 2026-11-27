@@ -20,6 +20,8 @@ import type { ChatTurn } from './adapters';
 import { AgentsService, type AgentRow } from './agents.service';
 import { AiProvidersService } from './ai-providers.service';
 import { AiRouterService, type Candidate, type ProviderRow } from './ai-router.service';
+import { ControlService, estopKey } from './control.service';
+import { CostGovernorService } from './cost-governor.service';
 import { MemoryService } from './memory.service';
 
 const { aiConversations, aiMessages, aiProviderCalls } = schema;
@@ -56,6 +58,8 @@ export class ChatService {
     private readonly outbox: OutboxService,
     private readonly agents: AgentsService,
     private readonly memory: MemoryService,
+    private readonly control: ControlService,
+    private readonly governor: CostGovernorService,
   ) {}
 
   list(ctx: Ctx): Promise<ConversationResponse[]> {
@@ -155,6 +159,7 @@ export class ChatService {
    */
   async prepare(ctx: Ctx, conversationId: string, body: SendMessage) {
     return this.db.withContext(ctx, async (tx) => {
+      await this.control.assertRunning(tx, ctx.tenantId);
       const conv = await this.conversation(tx, ctx, conversationId);
       let providerId = conv.providerId;
       let model = conv.model;
@@ -225,7 +230,8 @@ export class ChatService {
 
       const rows = (await this.providers.rows(tx, ctx.tenantId)).filter((p) => p.enabled);
       // A provider chosen in the conversation wins over the agent's own choice.
-      const candidates = providerId ? orderCandidates(rows, providerId, model) : orderCandidates(rows, agent?.providerId ?? null, agent?.model ?? model);
+      const ordered = providerId ? orderCandidates(rows, providerId, model) : orderCandidates(rows, agent?.providerId ?? null, agent?.model ?? model);
+      const candidates = await this.governor.filter(tx, ctx.tenantId, ordered);
       const system = systemPrompt({ mode: conv.mode, agent, memory });
       const messages = buildTurns(history.reverse(), body.content, system);
       return { userMessageId: userMessage.id, assistantId, candidates, messages };
@@ -239,14 +245,25 @@ export class ChatService {
     signal: AbortSignal,
   ): Promise<ChatMessageResponse> {
     emit({ type: 'start', userMessageId: prepared.userMessageId, assistantMessageId: prepared.assistantId });
-    const result = await this.router.route({
-      candidates: prepared.candidates,
-      messages: prepared.messages,
-      signal,
-      emit,
-      resolveKey: (p: ProviderRow) =>
-        p.secretRef ? this.db.withContext(ctx, (tx) => this.vault.resolve(tx, ctx.tenantId, p.secretRef!)) : Promise.resolve(null),
-    });
+    // Emergency Stop aborts a reply that is already streaming.
+    const stop = new AbortController();
+    const unwatch = this.control.watch([estopKey(ctx.tenantId)], stop);
+    let result;
+    try {
+      result = await this.router.route({
+        candidates: prepared.candidates,
+        messages: prepared.messages,
+        signal: AbortSignal.any([signal, stop.signal]),
+        emit,
+        resolveKey: (p: ProviderRow) =>
+          p.secretRef ? this.db.withContext(ctx, (tx) => this.vault.resolve(tx, ctx.tenantId, p.secretRef!)) : Promise.resolve(null),
+      });
+    } finally {
+      unwatch();
+    }
+    if (stop.signal.aborted && result.status !== 'complete') {
+      result = { ...result, status: 'cancelled' as const, errorCode: 'EMERGENCY_STOP', errorMessage: 'Đã Dừng khẩn cấp' };
+    }
 
     return this.db.withContext(ctx, async (tx) => {
       const [saved] = await tx
@@ -282,6 +299,7 @@ export class ChatService {
         );
       }
       await tx.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, saved!.conversationId));
+      await this.governor.afterSpend(tx, ctx.tenantId);
       await this.outbox.enqueue(tx, {
         tenantId: ctx.tenantId,
         type: 'ai.message.completed',
