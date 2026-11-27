@@ -1,4 +1,8 @@
 import type {
+  ClaimJobResponse,
+  FinishJob,
+  JobProgress,
+  JobProgressResponse,
   DeviceInfo,
   Heartbeat,
   HeartbeatResponse,
@@ -58,4 +62,26 @@ export function heartbeat(
   body: Heartbeat,
 ): Promise<HeartbeatResponse> {
   return post(`${server}/agent/heartbeat`, body, { 'X-Maris-Device': token });
+}
+
+export function claimJob(server: string, token: string): Promise<ClaimJobResponse> {
+  return post(`${server}/agent/jobs/claim`, {}, { 'X-Maris-Device': token });
+}
+
+export function jobProgress(
+  server: string,
+  token: string,
+  id: string,
+  body: JobProgress,
+): Promise<JobProgressResponse> {
+  return post(`${server}/agent/jobs/${id}/progress`, body, { 'X-Maris-Device': token });
+}
+
+export function finishJob(
+  server: string,
+  token: string,
+  id: string,
+  body: FinishJob,
+): Promise<{ accepted: boolean }> {
+  return post(`${server}/agent/jobs/${id}/finish`, body, { 'X-Maris-Device': token });
 }
