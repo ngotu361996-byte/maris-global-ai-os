@@ -54,6 +54,13 @@ tin, `FilesService.attach` (trong transaction 1) kiểm tra tệp thuộc ngư�
 người dùng: văn bản trong `<attached_file>`, ảnh thành `ChatTurn.images` mà mỗi adapter đổi sang dạng ảnh của nhà cung cấp. Tin
 nhắn lưu trong DB chỉ giữ chữ người dùng gõ.
 
+AI Tổng điều hành (`plans.service.ts`): hàng đợi `maris-plans` với hai loại việc. `plan`: gửi mục tiêu (trong `<goal>`) và danh
+sách Agent đang bật kèm mức quyền (trong `<agents>`), yêu cầu trả JSON; `parsePlan` kiểm tra bằng Zod, đối chiếu Agent thật và
+mức quyền (`levelAtLeast`), thu ngân sách cho vừa tổng. Không có gì chạy từ kế hoạch: `accept` tạo các công việc `pending` qua
+`TasksService.insert` trong một transaction (cập nhật có điều kiện `proposed → accepted` chống tạo trùng). `report`: khi mọi việc đã
+kết thúc, gửi kết quả từng việc trong `<task_result>`. Mức quyền Agent chỉ đổi qua `PATCH /ai/agents/:id` (`ai.manage`) và được
+kiểm tra lại khi công việc chạy.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { taskLevelSchema, type TaskLevel } from './access-levels';
 
 export const TASK_STATUSES = ['pending', 'rejected', 'queued', 'running', 'paused', 'completed', 'failed', 'cancelled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -26,6 +27,8 @@ export const createTaskSchema = z.object({
   agentId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   conversationId: z.string().uuid().nullable().optional(),
+  /** The lowest agent access level the work needs. */
+  requiredLevel: taskLevelSchema.optional(),
 });
 export type CreateTask = z.infer<typeof createTaskSchema>;
 
@@ -43,6 +46,9 @@ export interface TaskResponse {
   agentId: string | null;
   projectId: string | null;
   conversationId: string | null;
+  planId: string | null;
+  stepIndex: number | null;
+  requiredLevel: TaskLevel;
   status: TaskStatus;
   progress: string | null;
   createdBy: string;

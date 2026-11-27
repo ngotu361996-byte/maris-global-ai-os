@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { modelName } from './ai';
+import { accessLevelSchema, type AccessLevel } from './access-levels';
 
 const agentKey = z
   .string()
@@ -14,6 +15,7 @@ const agentFields = {
   providerId: z.string().uuid().nullable(),
   model: modelName.nullable(),
   status: z.enum(['active', 'paused']),
+  accessLevel: accessLevelSchema,
 };
 
 export const createAgentSchema = z.object({
@@ -25,6 +27,7 @@ export const createAgentSchema = z.object({
   providerId: agentFields.providerId.optional(),
   model: agentFields.model.optional(),
   status: agentFields.status.optional(),
+  accessLevel: agentFields.accessLevel.optional(),
 });
 export type CreateAgent = z.infer<typeof createAgentSchema>;
 
@@ -49,6 +52,7 @@ export interface AgentResponse {
   model: string | null;
   status: 'active' | 'paused';
   templateKey: string | null;
+  accessLevel: AccessLevel;
   version: number;
   updatedAt: string;
 }

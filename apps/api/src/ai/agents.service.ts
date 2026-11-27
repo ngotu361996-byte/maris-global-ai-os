@@ -59,6 +59,7 @@ export class AgentsService {
         providerId: body.providerId ?? null,
         model: body.model ?? null,
         status: body.status ?? 'active',
+        accessLevel: body.accessLevel ?? 'prepare',
         templateKey: null,
       });
       return agentResponse(row);
@@ -92,6 +93,7 @@ export class AgentsService {
               providerId: null,
               model: null,
               status: 'active',
+              accessLevel: 'prepare',
               templateKey: t.key,
             },
             false,
@@ -130,6 +132,18 @@ export class AgentsService {
         metadata: { fields: Object.keys(body), version },
         ip: ctx.ip,
       });
+      // Access level changes get their own entry: they decide what the agent may do.
+      if (body.accessLevel && body.accessLevel !== current.accessLevel) {
+        await this.audit.append(tx, {
+          tenantId: ctx.tenantId,
+          actorUserId: ctx.userId,
+          action: 'ai.agent.access_level_changed',
+          targetType: 'ai_agent',
+          targetId: id,
+          metadata: { from: current.accessLevel, to: body.accessLevel },
+          ip: ctx.ip,
+        });
+      }
       return agentResponse(row!);
     });
   }
@@ -204,6 +218,7 @@ export class AgentsService {
         providerId: row.providerId,
         model: row.model,
         status: row.status,
+        accessLevel: row.accessLevel,
       },
       createdBy: ctx.userId,
     });
@@ -222,6 +237,7 @@ export function agentResponse(r: AgentRow): AgentResponse {
     model: r.model,
     status: r.status,
     templateKey: r.templateKey,
+    accessLevel: r.accessLevel,
     version: r.version,
     updatedAt: r.updatedAt.toISOString(),
   };

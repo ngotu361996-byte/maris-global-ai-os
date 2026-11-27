@@ -7,6 +7,9 @@ import { LocalFileStorage } from '../files/file-storage';
 import { cleanFileName, detectType } from '../files/file-type';
 import { applyRegistry, type ModelRow } from './models.service';
 import { councilSystemPrompt, critiquePrompt, synthesisPrompt } from './council.service';
+import { parsePlan, type PlannerAgent } from './plans.service';
+import { assertLevel } from './tasks.service';
+import { levelAtLeast } from '@maris/contracts';
 
 describe('AI provider URL guard (SSRF)', () => {
   const strict = { kind: 'openai', allowPrivate: false };
@@ -219,5 +222,46 @@ describe('image input', () => {
       { role: 'user', content: 'b', images: [img] },
     ]);
     expect(turns).toEqual([{ role: 'user', content: 'a\n\nb', images: [img] }]);
+  });
+});
+
+describe('AI Central Command', () => {
+  const agents: PlannerAgent[] = [
+    { id: 'a1', name: 'AI Phân tích', role: 'r', accessLevel: 'analyze' },
+    { id: 'a2', name: 'AI Content', role: 'r', accessLevel: 'prepare' },
+  ];
+  const step = (extra: Record<string, unknown>) => ({ title: 't', goal: 'g', scope: 's', successCriteria: 'c', ...extra });
+
+  it('orders access levels and refuses agents below the level', () => {
+    expect(levelAtLeast('deploy', 'read')).toBe(true);
+    expect(levelAtLeast('analyze', 'prepare')).toBe(false);
+    expect(() => assertLevel({ name: 'X', accessLevel: 'read' }, 'analyze')).toThrow();
+    expect(() => assertLevel({ name: 'X', accessLevel: 'prepare' }, 'prepare')).not.toThrow();
+  });
+
+  it('reads the plan JSON even inside a code fence, and keeps only real, qualified agents', () => {
+    const text = 'Kế hoạch:\n```json\n' + JSON.stringify({
+      summary: 'ok',
+      steps: [step({ agent: 1, requiredLevel: 'analyze' }), step({ agent: 1, requiredLevel: 'prepare' }), step({ agent: 7 }), step({ agent: 2, requiredLevel: 'execute' })],
+    }) + '\n```';
+    const plan = parsePlan(text, agents, 1);
+    expect(plan.steps.map((s) => s.agentId)).toEqual(['a1', null, null, 'a2']);
+    expect(plan.steps[1]!.note).toContain('AI Phân tích');
+    expect(plan.steps[2]!.note).toContain('không có trong danh sách');
+    expect(plan.steps[3]!.requiredLevel).toBe('prepare'); // beyond text work falls back to the highest text level
+  });
+
+  it('fits step budgets into the plan budget and caps the step count', () => {
+    const many = { summary: 's', steps: Array.from({ length: 12 }, () => step({ budgetUsd: 5 })) };
+    const plan = parsePlan(JSON.stringify(many), agents, 2);
+    expect(plan.steps).toHaveLength(8);
+    expect(plan.steps.reduce((a, s) => a + s.budgetUsd, 0)).toBeLessThanOrEqual(2);
+    const even = parsePlan(JSON.stringify({ summary: 's', steps: [step({}), step({})] }), agents, 1);
+    expect(even.steps.map((s) => s.budgetUsd)).toEqual([0.5, 0.5]);
+  });
+
+  it('rejects replies that are not a plan', () => {
+    expect(() => parsePlan('Tôi không làm được', agents, 1)).toThrow();
+    expect(() => parsePlan('{"summary": "x", "steps": []}', agents, 1)).toThrow();
   });
 });
