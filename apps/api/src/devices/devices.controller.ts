@@ -238,7 +238,9 @@ export class WorkerJobsController {
     @Body(new ZodPipe(createWorkerJobSchema)) body: CreateWorkerJob,
     @Req() req: Request,
   ): Promise<WorkerJobResponse> {
-    return this.jobs.create(ctxOf(user, tenant, req), body);
+    return this.jobs.create(ctxOf(user, tenant, req), body, {
+      canRunCode: tenant.permissions.has('infra.code'),
+    });
   }
 
   @Get(':id')
@@ -284,7 +286,9 @@ export class WorkerJobsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: Request,
   ): Promise<WorkerJobResponse> {
-    return this.jobs.retry(ctxOf(user, tenant, req), id);
+    return this.jobs.retry(ctxOf(user, tenant, req), id, {
+      canRunCode: tenant.permissions.has('infra.code'),
+    });
   }
 }
 

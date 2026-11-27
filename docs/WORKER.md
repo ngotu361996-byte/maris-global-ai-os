@@ -36,8 +36,25 @@ Worker chỉ làm các loại việc có sẵn trong chương trình, không ch�
 | Kiểm tra máy | Báo cáo hệ điều hành, CPU, RAM, ổ đĩa, GPU, Node.js, Ollama và độ trễ tới MARIS |
 | AI cục bộ (Ollama) | Chạy model trên Ollama của chính máy đó (`127.0.0.1:11434`). Cần cài Ollama và tải model, ví dụ `ollama pull llama3.2`. Worker tự nhận ra trong vòng 5 phút |
 | Việc thử | Đếm giây và báo tiến độ, để thử phân việc, hủy và chuyển máy |
+| Chạy mã trong sandbox | Chạy Python hoặc Node.js trong container Docker cách ly. Chỉ trên máy Code Runner có `--allow-code` (xem bên dưới) |
 
 Giao việc ở **Hạ tầng → Việc của Worker**. Máy nhận việc khi đang hoạt động, còn chỗ trống, RAM và ổ đĩa chưa đầy. Máy tắt hay mất mạng quá 60 giây thì việc tự chuyển sang máy khác, tối đa 3 lần. Bấm Ctrl+C khi đang chạy việc thì việc cũng được trả về hàng đợi.
+
+## Máy chạy mã (Code Runner)
+
+Chỉ dùng cho máy bạn đồng ý cho chạy mã. Cần ba điều:
+
+1. Thiết bị được tạo với loại **Code Runner** trên trang Hạ tầng. Máy loại khác không bao giờ nhận việc chạy mã.
+2. Docker Desktop đã cài và đang chạy (“Engine running”).
+3. Chạy Worker bằng lệnh:
+
+```
+pnpm worker run --allow-code
+```
+
+Lần đầu Worker tải hai ảnh `python:3.12-alpine` và `node:22-alpine` (khoảng 100 MB). Dòng “Nhận các loại việc” có `code.run` là sẵn sàng.
+
+Mỗi lần chạy là một container mới, xóa ngay khi xong: không có mạng, không đọc hay ghi được file của máy, tối đa 256 MB RAM, 1 nhân CPU, 64 tiến trình, quá giờ thì bị dừng. Chỉ người có quyền “chạy mã” (`infra.code`, mặc định chủ và quản trị) mới giao được việc này.
 
 ## Địa chỉ máy chủ
 

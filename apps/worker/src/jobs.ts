@@ -9,6 +9,7 @@ import {
 } from '@maris/contracts';
 import { claimJob, finishJob, jobProgress, ServerError } from './client';
 import { AGENT_VERSION, parseNvidiaSmi } from './metrics';
+import { dockerAvailable, runSandbox } from './sandbox';
 
 /** Ollama on this machine only; the address is fixed so a job cannot point the worker elsewhere. */
 export const OLLAMA_URL = 'http://127.0.0.1:11434';
@@ -23,12 +24,16 @@ export interface JobContext {
   /** Records progress and a log line; sent with the next report. */
   report(progress?: number, note?: string, logLine?: string): void;
   server: string;
+  /** The job's time limit; the job is stopped when it runs out. */
+  timeoutSec: number;
 }
 
 export class JobError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    /** Sent with the failure, e.g. the output of a program that ran out of time. */
+    readonly result?: unknown,
   ) {
     super(message);
   }
@@ -171,6 +176,30 @@ export const HANDLERS: Record<WorkerJobKind, Handler> = {
       durationMs: Date.now() - t0,
     };
   },
+
+  async 'code.run'(raw, ctx) {
+    const input = workerJobInputSchemas['code.run'].parse(raw);
+    ctx.report(5, 'Khởi động sandbox');
+    // Leave a few seconds before the job's limit to stop the container and send the output.
+    const timeoutMs = Math.max(5, ctx.timeoutSec - 5) * 1000;
+    const out = await runSandbox(input, { signal: ctx.signal, timeoutMs });
+    if (out.cancelled) throw new JobError('CANCELLED', 'Đã dừng');
+    const { cancelled: _cancelled, ...result } = out;
+    if (out.timedOut)
+      throw new JobError(
+        'CODE_TIMEOUT',
+        `Chương trình chạy quá ${Math.round(timeoutMs / 1000)} giây nên đã bị dừng`,
+        result,
+      );
+    // 125 is Docker's own failure (e.g. the image could not be pulled), not the program's.
+    if (out.exitCode === 125)
+      throw new JobError(
+        'SANDBOX_ERROR',
+        `Docker không chạy được sandbox: ${out.stderr.trim().slice(0, 500)}`,
+      );
+    ctx.report(100, `Mã thoát ${out.exitCode}`);
+    return result;
+  },
 };
 
 /** Models installed in Ollama on this machine, or null when Ollama is not running. */
@@ -185,11 +214,15 @@ export async function ollamaModels(): Promise<string[] | null> {
   }
 }
 
-/** Job kinds this machine can run now. */
-export async function capabilities(): Promise<WorkerJobKind[]> {
+/**
+ * Job kinds this machine can run now. Code runs only when the owner of the machine started the
+ * worker with --allow-code and Docker is running.
+ */
+export async function capabilities(opts: { allowCode: boolean }): Promise<WorkerJobKind[]> {
   const kinds: WorkerJobKind[] = ['diagnostics', 'test.wait'];
   const models = await ollamaModels();
   if (models && models.length > 0) kinds.push('ollama.generate');
+  if (opts.allowCode && (await dockerAvailable())) kinds.push('code.run');
   return kinds;
 }
 
@@ -275,6 +308,7 @@ export class JobRunner {
       const result = await handler(job.input, {
         signal: controller.signal,
         server: this.server,
+        timeoutSec: job.timeoutSec,
         report: (p, n, line) => {
           if (p !== undefined) progress = p;
           if (n !== undefined) note = n;
@@ -290,6 +324,7 @@ export class JobRunner {
             status: 'failed',
             errorCode: e instanceof JobError ? e.code : 'JOB_FAILED',
             errorMessage: (e as Error).message.slice(0, 1000),
+            ...(e instanceof JobError && e.result !== undefined ? { result: e.result } : {}),
             logs,
           };
     } finally {

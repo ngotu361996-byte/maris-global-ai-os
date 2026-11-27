@@ -18,6 +18,7 @@ export const PERMISSIONS = [
   'ai.approve',
   'infra.read',
   'infra.manage',
+  'infra.code',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
