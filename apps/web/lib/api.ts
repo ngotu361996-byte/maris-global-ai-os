@@ -76,3 +76,22 @@ export async function apiStream<E>(path: string, body: unknown, onEvent: (event:
     }
   }
 }
+
+/** Uploads one file as the raw body; the server detects its type from the content. */
+export async function uploadFile<T>(file: File): Promise<T> {
+  const headers = new Headers({
+    'Content-Type': 'application/octet-stream',
+    'X-File-Name': encodeURIComponent(file.name),
+    'X-MARIS-Session': 'cookie',
+    'X-MARIS-CSRF': '1',
+  });
+  const tenant = session.tenant();
+  if (tenant) headers.set('X-Tenant-Id', tenant);
+  const res = await fetch(`${API_URL}/ai/files`, { method: 'POST', headers, body: file, credentials: 'include' });
+  const body = (await res.json().catch(() => ({}))) as T | ApiError;
+  if (!res.ok) {
+    const err = (body as ApiError).error ?? { code: 'NETWORK', message: 'Không kết nối được API' };
+    throw new ApiRequestError(res.status, err.code, err.message);
+  }
+  return body as T;
+}

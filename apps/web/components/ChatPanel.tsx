@@ -1,10 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import {
   CHAT_MODE_INFO,
   CHAT_MODES,
+  FILE_ACCEPT,
+  FILE_AI_READS,
+  FILE_KIND_LABEL,
+  MAX_ATTACHMENTS,
   type AgentResponse,
   type AiProviderResponse,
   type ChatMessageResponse,
@@ -12,11 +16,13 @@ import {
   type ChatStreamEvent,
   type ConversationDetailResponse,
   type ConversationResponse,
+  type FileResponse,
   type ProjectResponse,
 } from '@maris/contracts';
 import { Markdown } from '@/components/Markdown';
 import { btnCls, inputCls } from '@/components/ui';
-import { api, apiStream } from '@/lib/api';
+import { VoiceButton } from '@/components/VoiceButton';
+import { api, apiStream, uploadFile } from '@/lib/api';
 
 interface Props {
   conversationId: string | null;
@@ -52,6 +58,9 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const [attachments, setAttachments] = useState<FileResponse[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const convRef = useRef<string | null>(conversationId);
   const endRef = useRef<HTMLDivElement>(null);
@@ -90,9 +99,41 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
+  async function addFiles(files: File[]) {
+    if (!files.length) return;
+    setError(null);
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (files.length > room) setError(`Mỗi tin nhắn đính kèm tối đa ${MAX_ATTACHMENTS} tệp.`);
+    for (const file of files.slice(0, Math.max(0, room))) {
+      setUploading((n) => n + 1);
+      try {
+        const f = await uploadFile<FileResponse>(file);
+        setAttachments((list) => [...list, f]);
+      } catch (e) {
+        setError(`${file.name}: ${e instanceof Error ? e.message : 'Không tải lên được'}`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  }
+
+  async function removeAttachment(id: string) {
+    setAttachments((list) => list.filter((f) => f.id !== id));
+    await api(`/ai/files/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  /** A pasted screenshot is uploaded like a chosen file. */
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(e.clipboardData.files);
+    if (!files.length) return;
+    e.preventDefault();
+    void addFiles(files);
+  }
+
   async function send() {
-    const content = text.trim();
-    if (!content || streaming) return;
+    const sentFiles = attachments;
+    const content = text.trim() || (sentFiles.length ? 'Hãy xem các tệp đính kèm.' : '');
+    if (!content || streaming || uploading) return;
     setError(null);
     setStreaming(true);
     setStatus('Đang gửi…');
@@ -103,10 +144,19 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
     const blank = { providerId: null, model: null, inputTokens: null, outputTokens: null, costUsd: null, latencyMs: null, errorCode: null, createdAt: now };
     setMessages((m) => [
       ...m,
-      { ...blank, id: `${tempId}-u`, role: 'user', content, status: 'complete', local: true },
+      {
+        ...blank,
+        id: `${tempId}-u`,
+        role: 'user',
+        content,
+        status: 'complete',
+        local: true,
+        attachments: sentFiles.map((f) => ({ id: f.id, name: f.name, kind: f.kind, mime: f.mime, sizeBytes: f.sizeBytes })),
+      },
       { ...blank, id: tempId, role: 'assistant', content: '', status: 'streaming', local: true },
     ]);
     setText('');
+    setAttachments([]);
     const patch = (fn: (m: LocalMessage) => LocalMessage) => setMessages((list) => list.map((m) => (m.id === tempId ? fn(m) : m)));
 
     try {
@@ -128,7 +178,12 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
       }
       await apiStream<ChatStreamEvent>(
         `/ai/conversations/${id}/messages`,
-        { content, providerId: providerId || null, model: providerId && model ? model : null },
+        {
+          content,
+          providerId: providerId || null,
+          model: providerId && model ? model : null,
+          ...(sentFiles.length ? { attachmentIds: sentFiles.map((f) => f.id) } : {}),
+        },
         (ev) => {
           if (ev.type === 'provider') {
             setStatus(`${ev.name} · ${ev.model}`);
@@ -276,7 +331,7 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
                 Chưa có AI nào. <Link href="/ai" className="underline">Thêm AI Provider</Link> rồi quay lại đây.
               </>
             ) : (
-              'Giao việc hoặc hỏi MARIS bằng tiếng Việt. Enter để gửi, Shift+Enter để xuống dòng.'
+              'Giao việc hoặc hỏi MARIS bằng tiếng Việt. Enter để gửi, Shift+Enter để xuống dòng. Bấm 📎 hoặc dán ảnh để đính kèm tệp, bấm 🎤 để nói.'
             )}
           </div>
         )}
@@ -288,7 +343,18 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
               } ${m.status === 'error' ? 'border-danger' : ''}`}
             >
               {m.role === 'user' ? (
-                <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                <>
+                  <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="mt-1 flex flex-wrap justify-end gap-1">
+                      {m.attachments.map((a) => (
+                        <span key={a.id} className="rounded bg-black/10 px-1.5 py-0.5 text-[11px]" title={FILE_KIND_LABEL[a.kind]}>
+                          📎 {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : m.content ? (
                 <>
                   <Markdown text={m.content} />
@@ -335,11 +401,51 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       {status && <p className="mt-2 text-xs text-muted">{status}</p>}
 
+      {(attachments.length > 0 || uploading > 0) && (
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Tệp đính kèm">
+          {attachments.map((f) => (
+            <span key={f.id} className="flex items-center gap-1 rounded-md border border-line bg-panel px-2 py-1 text-xs">
+              📎 {f.name}
+              <span className="text-muted">· {FILE_KIND_LABEL[f.kind]}</span>
+              {!FILE_AI_READS[f.kind] && <span className="text-danger">· AI chưa đọc được</span>}
+              <button onClick={() => void removeAttachment(f.id)} className="ml-1 text-muted hover:text-danger" aria-label={`Bỏ ${f.name}`}>
+                ✕
+              </button>
+            </span>
+          ))}
+          {uploading > 0 && <span className="px-2 py-1 text-xs text-muted">Đang tải lên {uploading} tệp…</span>}
+        </div>
+      )}
+
       <div className="mt-2 flex gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept={FILE_ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            void addFiles(Array.from(e.target.files ?? []));
+            e.target.value = '';
+          }}
+        />
+        <div className="flex flex-col gap-1">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={streaming || attachments.length >= MAX_ATTACHMENTS}
+            className="rounded-md border border-line px-2 py-1 text-sm disabled:opacity-50"
+            title="Đính kèm tệp (ảnh, văn bản, PDF, Word/Excel, video, âm thanh)"
+            aria-label="Đính kèm tệp"
+          >
+            📎
+          </button>
+          <VoiceButton onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} onError={setError} disabled={streaming} />
+        </div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
+          onPaste={onPaste}
           rows={compact ? 2 : 3}
           placeholder="Nhập yêu cầu…"
           className={`${inputCls} resize-none`}
@@ -351,7 +457,7 @@ export function ChatPanel({ conversationId, onConversationChange, compact }: Pro
             Dừng
           </button>
         ) : (
-          <button onClick={() => void send()} disabled={!text.trim()} className={btnCls}>
+          <button onClick={() => void send()} disabled={(!text.trim() && !attachments.length) || uploading > 0} className={btnCls}>
             Gửi
           </button>
         )}

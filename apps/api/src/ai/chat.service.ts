@@ -23,6 +23,7 @@ import { AiProvidersService } from './ai-providers.service';
 import { AiRouterService, type Candidate, type ProviderRow } from './ai-router.service';
 import { ControlService, estopKey } from './control.service';
 import { CostGovernorService } from './cost-governor.service';
+import { FilesService } from './files.service';
 import { MemoryService } from './memory.service';
 import { applyRegistry, ModelsService } from './models.service';
 
@@ -63,6 +64,7 @@ export class ChatService {
     private readonly control: ControlService,
     private readonly governor: CostGovernorService,
     private readonly models: ModelsService,
+    private readonly files: FilesService,
   ) {}
 
   list(ctx: Ctx): Promise<ConversationResponse[]> {
@@ -112,7 +114,15 @@ export class ChatService {
     return this.db.withContext(ctx, async (tx) => {
       const conv = await this.conversation(tx, ctx, id);
       const messages = await tx.select().from(aiMessages).where(eq(aiMessages.conversationId, id)).orderBy(asc(aiMessages.createdAt));
-      return { ...conversationResponse(conv), messages: messages.map(messageResponse) };
+      const attachments = await this.files.forMessages(
+        tx,
+        ctx.tenantId,
+        messages.filter((m) => m.role === 'user').map((m) => m.id),
+      );
+      return {
+        ...conversationResponse(conv),
+        messages: messages.map((m) => ({ ...messageResponse(m), ...(attachments.has(m.id) ? { attachments: attachments.get(m.id) } : {}) })),
+      };
     });
   }
 
@@ -215,6 +225,7 @@ export class ChatService {
         status: 'streaming',
         createdAt: new Date(now + 1),
       });
+      const attached = await this.files.attach(tx, ctx, body.attachmentIds ?? [], conversationId, userMessage.id);
       const title = conv.title === DEFAULT_TITLE ? titleFrom(body.content) : conv.title;
       await tx
         .update(aiConversations)
@@ -227,7 +238,7 @@ export class ChatService {
         targetType: 'ai_conversation',
         targetId: conversationId,
         // Message text stays out of the audit log.
-        metadata: { messageId: userMessage.id, chars: body.content.length },
+        metadata: { messageId: userMessage.id, chars: body.content.length, attachments: attached.refs.length },
         ip: ctx.ip,
       });
 
@@ -238,7 +249,8 @@ export class ChatService {
       const registered = applyRegistry(ordered, await this.models.rows(tx, ctx.tenantId), MODE_CAPABILITY[conv.mode]);
       const candidates = await this.governor.filter(tx, ctx.tenantId, registered);
       const system = systemPrompt({ mode: conv.mode, agent, memory });
-      const messages = buildTurns(history.reverse(), body.content, system);
+      const messages = buildTurns(history.reverse(), attached.text ? `${body.content}\n\n${attached.text}` : body.content, system);
+      if (attached.images.length) messages[messages.length - 1]!.images = attached.images;
       return { userMessageId: userMessage.id, assistantId, candidates, messages };
     });
   }

@@ -2,7 +2,9 @@ import { assertAllowedProviderUrl, isPrivate } from './url-guard';
 import { buildTurns, orderCandidates, SYSTEM_PROMPT, systemPrompt } from './chat.service';
 import { cost, type ProviderRow } from './ai-router.service';
 import { errorFromStatus } from './provider-error';
-import { redactKeys } from './adapters';
+import { alternate, openAiMessage, redactKeys } from './adapters';
+import { LocalFileStorage } from '../files/file-storage';
+import { cleanFileName, detectType } from '../files/file-type';
 import { applyRegistry, type ModelRow } from './models.service';
 import { councilSystemPrompt, critiquePrompt, synthesisPrompt } from './council.service';
 
@@ -170,5 +172,52 @@ describe('council prompts', () => {
     expect(p.match(/<\/answer>/g)).toHaveLength(1);
     expect(synthesisPrompt('Q', [{ i: 0, text: 'x' }], [])).toContain('không phải bằng chứng');
     expect(councilSystemPrompt(null).startsWith(SYSTEM_PROMPT)).toBe(true);
+  });
+});
+
+describe('file type detection', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+  it.each([
+    [png, 'x.txt', 'image/png'],
+    [Buffer.from([0xff, 0xd8, 0xff, 0xe0]), 'a.jpg', 'image/jpeg'],
+    [Buffer.from('RIFF\0\0\0\0WEBPVP8 '), 'a.webp', 'image/webp'],
+    [Buffer.from('%PDF-1.4'), 'a.pdf', 'application/pdf'],
+    [Buffer.from('\0\0\0\x18ftypisom'), 'a.mp4', 'video/mp4'],
+    [Buffer.from('PK\x03\x04....'), 'a.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    [Buffer.from('tiêu đề,giá\n'), 'a.csv', 'text/csv'],
+  ])('detects %#', (buf, name, mime) => {
+    expect(detectType(buf, name)?.mime).toBe(mime);
+  });
+
+  it('refuses HTML, SVG, zip without an Office extension and binary text', () => {
+    expect(detectType(Buffer.from('<html></html>'), 'a.html')).toBeNull();
+    expect(detectType(Buffer.from('<svg></svg>'), 'a.svg')).toBeNull();
+    expect(detectType(Buffer.from('<svg></svg>'), 'a.txt')?.kind).toBe('text'); // stored as plain text, served as a download
+    expect(detectType(Buffer.from('PK\x03\x04....'), 'a.zip')).toBeNull();
+    expect(detectType(Buffer.from([0x61, 0xc3, 0x28]), 'a.txt')).toBeNull();
+    expect(cleanFileName('..\\..\\a/b/c\u0000.txt')).toBe('c.txt');
+  });
+
+  it('keeps storage keys inside the storage folder', async () => {
+    const store = new LocalFileStorage('/tmp/maris-test-store');
+    await expect(store.get('../../etc/passwd')).rejects.toThrow('invalid storage key');
+    await expect(store.get('00000000-0000-0000-0000-000000000000/../x')).rejects.toThrow('invalid storage key');
+  });
+});
+
+describe('image input', () => {
+  const img = { mime: 'image/png', data: 'QUJD' };
+  it('formats images for OpenAI and merges them across alternating turns', () => {
+    expect(openAiMessage({ role: 'user', content: 'xem', images: [img] }).content).toEqual([
+      { type: 'text', text: 'xem' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,QUJD' } },
+    ]);
+    expect(openAiMessage({ role: 'user', content: 'xem' }).content).toBe('xem');
+    const turns = alternate([
+      { role: 'system', content: 's' },
+      { role: 'user', content: 'a' },
+      { role: 'user', content: 'b', images: [img] },
+    ]);
+    expect(turns).toEqual([{ role: 'user', content: 'a\n\nb', images: [img] }]);
   });
 });

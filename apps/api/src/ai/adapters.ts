@@ -2,9 +2,17 @@ import type { AiProviderKind } from '@maris/contracts';
 import { AI_PROVIDER_PRESETS } from '@maris/contracts';
 import { errorFromStatus, ProviderError } from './provider-error';
 
+export interface ChatImage {
+  mime: string;
+  /** Base64 of the image bytes. */
+  data: string;
+}
+
 export interface ChatTurn {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  /** Images sent with a user turn (vision input). */
+  images?: ChatImage[];
 }
 
 export interface ProviderTarget {
@@ -132,7 +140,7 @@ const openAiCompatible: ProviderAdapter = {
     const res = await post(
       `${t.baseUrl}/chat/completions`,
       headers,
-      { model: t.model, messages, stream: true, stream_options: { include_usage: true } },
+      { model: t.model, messages: messages.map(openAiMessage), stream: true, stream_options: { include_usage: true } },
       signal,
     );
     const usage: StreamUsage = { inputTokens: null, outputTokens: null };
@@ -171,7 +179,17 @@ const anthropic: ProviderAdapter = {
         model: t.model,
         max_tokens: MAX_OUTPUT_TOKENS,
         ...(system ? { system } : {}),
-        messages: alternate(messages),
+        messages: alternate(messages).map((m) =>
+          m.images.length
+            ? {
+                role: m.role,
+                content: [
+                  ...m.images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })),
+                  { type: 'text', text: m.content },
+                ],
+              }
+            : { role: m.role, content: m.content },
+        ),
         stream: true,
       },
       signal,
@@ -212,7 +230,10 @@ const gemini: ProviderAdapter = {
       `${t.baseUrl}/v1beta/models/${encodeURIComponent(t.model)}:streamGenerateContent?alt=sse`,
       { 'x-goog-api-key': t.apiKey ?? '' },
       {
-        contents: alternate(messages).map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        contents: alternate(messages).map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [...m.images.map((i) => ({ inline_data: { mime_type: i.mime, data: i.data } })), { text: m.content }],
+        })),
         ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
         generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
       },
@@ -246,14 +267,25 @@ const gemini: ProviderAdapter = {
   },
 };
 
+/** OpenAI-style message; a user turn with images becomes text plus image_url parts. */
+export function openAiMessage(m: ChatTurn): { role: ChatTurn['role']; content: unknown } {
+  if (!m.images?.length) return { role: m.role, content: m.content };
+  return {
+    role: m.role,
+    content: [{ type: 'text', text: m.content }, ...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } }))],
+  };
+}
+
 /** Anthropic and Gemini need user/assistant turns that alternate and start with the user. */
-function alternate(messages: ChatTurn[]): { role: 'user' | 'assistant'; content: string }[] {
-  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+export function alternate(messages: ChatTurn[]): { role: 'user' | 'assistant'; content: string; images: ChatImage[] }[] {
+  const out: { role: 'user' | 'assistant'; content: string; images: ChatImage[] }[] = [];
   for (const m of messages) {
     if (m.role === 'system' || !m.content) continue;
     const last = out[out.length - 1];
-    if (last && last.role === m.role) last.content += `\n\n${m.content}`;
-    else out.push({ role: m.role, content: m.content });
+    if (last && last.role === m.role) {
+      last.content += `\n\n${m.content}`;
+      last.images.push(...(m.images ?? []));
+    } else out.push({ role: m.role, content: m.content, images: [...(m.images ?? [])] });
   }
   while (out[0]?.role === 'assistant') out.shift();
   return out;

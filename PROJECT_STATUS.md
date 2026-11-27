@@ -6,7 +6,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
-| 3. AI Central Command | Sprint 3, 4, 5 đã merge; Sprint 6 (Hội đồng AI, Danh mục model) đang review; còn tải tệp và giọng nói (Sprint 7) |
+| 3. AI Central Command | Sprint 3, 4, 5 đã merge; Sprint 6 (Hội đồng AI, Danh mục model) đang review; Sprint 7 (tải tệp, giọng nói) đang review |
 | 4–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -73,7 +73,12 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 - Chạy trên hàng đợi BullMQ `maris-council`, cùng cờ `AI_TASK_WORKER_ENABLED`
 - Giới hạn: một bước đang chạy có thể vượt giới hạn chi phí một chút vì giới hạn được kiểm tra giữa các bước; vòng lặp tự cải tiến (Planner → Worker → Grader → …) chưa làm
 
-## Sprint 7 (dự kiến, Giai đoạn 3)
+## Sprint 7 – Tải tệp lên và nhập bằng giọng nói (Giai đoạn 3)
 
-- Tải hình ảnh, video, tài liệu. Máy của người dùng không tải được image `minio/minio` từ Docker Hub, nên cần lưu tệp trên ổ đĩa cục bộ trước, MinIO/S3 sau
-- Nhập liệu bằng giọng nói
+- Migration `0007`: `ai.files` (tên hiển thị, loại phát hiện từ nội dung, kích thước, SHA-256, khóa lưu trữ, tin nhắn đính kèm, xóa mềm)
+- Tệp lưu trên ổ đĩa của máy chủ (`FILE_STORAGE_DIR`, mặc định `./data/uploads`), dưới khóa `<tenant>/<id tệp>` do MARIS tạo; tên tệp người dùng không bao giờ thành đường dẫn. Giới hạn `FILE_MAX_MB` (mặc định 25). Giao diện `FileStorage` để thay bằng MinIO/S3 sau
+- Loại tệp đoán từ nội dung (magic bytes), không tin tên tệp hay trình duyệt: ảnh PNG/JPG/GIF/WEBP, văn bản TXT/MD/CSV/JSON (phải là UTF-8), PDF, Word/Excel/PowerPoint, video MP4/MOV/WEBM, âm thanh MP3/M4A/WAV/OGG. HTML, SVG và tệp chạy được bị từ chối. Tải về luôn là tệp đính kèm với CSP `sandbox`
+- Tệp chỉ người tải lên xem, tải về, xóa và đính kèm được. Nhật ký kiểm toán ghi loại và kích thước, không ghi tên tệp
+- Chat: nút 📎 hoặc dán ảnh vào ô nhập để đính kèm (tối đa 8 tệp mỗi tin). AI đọc được ảnh (tới 5 MB, gửi dạng ảnh cho OpenAI/Anthropic/Gemini) và văn bản (tổng 100.000 ký tự, đặt trong thẻ `<attached_file>` như dữ liệu, không như lệnh). PDF, Office, video, âm thanh được lưu và ghi chú cho AI là chưa đọc được
+- Nút 🎤: nhận dạng giọng nói tiếng Việt của trình duyệt (Edge, Chrome). Âm thanh đi tới dịch vụ nhận dạng của hãng trình duyệt, không qua MARIS; nút ghi rõ điều này
+- Giới hạn: chưa đọc nội dung PDF/Word/Excel, chưa chép lời video/âm thanh; tệp chưa đính kèm không tự xóa. Sao lưu thư mục `data/uploads` cùng với `.env`

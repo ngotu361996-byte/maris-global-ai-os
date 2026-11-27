@@ -47,6 +47,13 @@ thành viên (provider còn bật, registry, ngân sách), gọi router song son
 thành viên làm dự phòng), ghi `ai.council_turns` và `ai.provider_calls` (`council_id`). Chi phí cộng dồn bằng SQL vì các lượt
 chạy song song. Câu trả lời của AI khác được đưa vào trong thẻ `<answer>`/`<critique>` (đã lọc thẻ) như dữ liệu, không như lệnh.
 
+Tệp (`files.service.ts`, `apps/api/src/files`): `POST /ai/files` nhận thân request thô (`application/octet-stream`, tên trong
+`X-File-Name`), đọc tới giới hạn rồi `detectType` đoán loại từ nội dung. Byte ghi vào `LocalFileStorage` (ghi tệp tạm rồi đổi
+tên; khóa chỉ được là `<uuid>/<uuid>`), hàng `ai.files` và audit ghi trong một transaction; transaction lỗi thì xóa byte. Khi gửi
+tin, `FilesService.attach` (trong transaction 1) kiểm tra tệp thuộc người gửi, gắn tệp vào tin nhắn và tạo phần thêm cho lượt
+người dùng: văn bản trong `<attached_file>`, ảnh thành `ChatTurn.images` mà mỗi adapter đổi sang dạng ảnh của nhà cung cấp. Tin
+nhắn lưu trong DB chỉ giữ chữ người dùng gõ.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
