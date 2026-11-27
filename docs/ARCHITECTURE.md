@@ -32,6 +32,12 @@ System prompt được ghép theo thứ tự cố định (`systemPrompt()` tron
 Prompt của Agent và bộ nhớ là dữ liệu của tenant nên không thể bỏ quy tắc an toàn. Agent và dự án dùng chung trong tenant;
 mỗi lần sửa Agent tăng `version` và lưu ảnh chụp cấu hình vào `ai.agent_versions` (chỉ INSERT).
 
+Structured Task (`tasks.service.ts`): duyệt xong thì đưa `{tenantId, taskId, userId người duyệt}` vào BullMQ `maris-tasks`; worker
+chạy với ngữ cảnh tenant của người duyệt (RLS vẫn áp dụng), nhận việc bằng cập nhật có điều kiện `queued → running`. Tạm dừng,
+hủy và Dừng khẩn cấp đặt cờ Redis (`ai:task:abort:<id>`, `ai:estop:<tenant>`), `ControlService.watch` kiểm tra mỗi 0,5 giây và
+ngắt lời gọi AI. Bảng `ai.controls` là nguồn sự thật cho Dừng khẩn cấp; cờ Redis chỉ đặt sau khi transaction đã commit.
+Cost Governor đọc chi phí tháng từ `ai.provider_calls` trước mỗi lượt chat và mỗi lần chạy việc.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).
