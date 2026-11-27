@@ -31,7 +31,11 @@ import {
   updateItemSchema,
   uploadAssetQuery,
   uploadVersionQuery,
+  generateSchema,
+  variantSchema,
   CONTENT_LIBRARIES,
+  type Generate,
+  type Variant,
   type AssetResponse,
   type CreateAsset,
   type CreateFolder,
@@ -56,6 +60,7 @@ import {
 } from '../common/request-context';
 import { ZodPipe } from '../common/zod.pipe';
 import { RequirePermission, TenantGuard } from '../tenancy/tenant.guard';
+import { ContentAiService } from './content-ai.service';
 import { ContentService } from './content.service';
 
 const ctxOf = (user: AuthUser, tenant: TenantContext, req: Request): Ctx => ({
@@ -109,7 +114,10 @@ function sendFile(
 @Controller('content')
 @UseGuards(AuthGuard, TenantGuard)
 export class ContentController {
-  constructor(private readonly content: ContentService) {}
+  constructor(
+    private readonly content: ContentService,
+    private readonly ai: ContentAiService,
+  ) {}
 
   // ---------------------------------------------------------------- folders
 
@@ -428,5 +436,45 @@ export class ContentController {
     @Req() req: Request,
   ): Promise<ItemDetailResponse> {
     return this.content.archive(ctxOf(user, tenant, req), id);
+  }
+
+  // ---------------------------------------------------------------- AI content writing
+
+  @Post('items/:id/generate')
+  @HttpCode(202)
+  @RequirePermission('content.generate')
+  generate(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(generateSchema)) body: Generate,
+    @Req() req: Request,
+  ): Promise<ItemDetailResponse> {
+    return this.ai.generate(ctxOf(user, tenant, req), id, body);
+  }
+
+  @Post('items/:id/variants')
+  @HttpCode(202)
+  @RequirePermission('content.generate')
+  variant(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(variantSchema)) body: Variant,
+    @Req() req: Request,
+  ): Promise<ItemDetailResponse> {
+    return this.ai.variant(ctxOf(user, tenant, req), id, body);
+  }
+
+  @Post('generations/:id/cancel')
+  @HttpCode(200)
+  @RequirePermission('content.generate')
+  cancelGeneration(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: Request,
+  ): Promise<ItemDetailResponse> {
+    return this.ai.cancel(ctxOf(user, tenant, req), id, tenant.permissions.has('ai.approve'));
   }
 }

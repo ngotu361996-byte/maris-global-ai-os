@@ -118,6 +118,13 @@ SHA-256, giữ 64 KB đầu để nhận dạng loại, rồi mới đổi tên 
 `pg_advisory_xact_lock` theo tenant và SHA-256. `content.assets_keep_original` (trigger) chặn mọi thay đổi bản gốc;
 `content.item_versions` chỉ được INSERT. Duyệt kiểm tra quyền sử dụng của mọi nguồn trong phiên bản hiện tại.
 
+AI viết nội dung (Sprint 17, đặc tả Phần 13): `ContentAiService` dựng lời nhắc từ thông tin sản phẩm đã xác minh và
+tạo một việc AI (`TasksService.insert` với `content`, duyệt sẵn bởi người yêu cầu), nên dùng chung AI Router, ngân sách,
+Dừng khẩn cấp và ghi chi phí. Khi việc xong, `TasksService.onFinished` gọi `ContentAiService.finish`: lưu chữ thành
+phiên bản mới (`ai_task_id`) và chạy `factWarnings` so với `content.generations.allowed_text` (thông tin sản phẩm, yêu
+cầu, tiêu đề). Cảnh báo của phiên bản hiện tại chặn duyệt. Việc AI viết nội dung không chạy lại được; tạm dừng hay Dừng
+khẩn cấp sẽ kết thúc lượt viết.
+
 
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

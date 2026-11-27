@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 16)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 17)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -9,7 +9,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6. Content Factory | Sprint 16 (kho nội dung gốc và thành phẩm) đang review; kế tiếp: 17 AI viết nội dung, 18 xử lý ảnh, 19 xử lý video, 20 kiểm định và nghiệm thu |
+| 6. Content Factory | Sprint 16 (kho nội dung) đã merge; Sprint 17 (AI viết nội dung) đang review; kế tiếp: 18 xử lý ảnh, 19 xử lý video, 20 kiểm định và nghiệm thu |
 | 7–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -131,7 +131,20 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 16 – Kho nội dung gốc và Kho thành phẩm (Giai đoạn 6)
+## Sprint 17 – AI viết nội dung (Giai đoạn 6)
+
+- Migration `0017`: quyền `content.generate` (chủ, quản trị, quản lý); bảng `content.generations` (RLS); cột `content.items.variant_of` và `ai.tasks.content_item_id`
+- AI viết phiên bản mới cho một thành phẩm (M13, đặc tả Phần 13): `POST /api/v1/content/items/:id/generate` với thông tin sản phẩm, văn bản tham khảo, yêu cầu thêm, giọng văn và ngân sách (mặc định 0,2 USD, tối đa 2 USD)
+- Chỉ dùng thông tin sản phẩm đã xác minh: chọn thông tin chưa xác minh bị từ chối (`CONTENT_FACTS_UNVERIFIED`). Văn bản tham khảo “không được dùng” bị từ chối; tệp (PDF, video) chưa đọc được
+- Mỗi lần viết là một việc AI đã duyệt sẵn bởi người yêu cầu, chạy qua AI Router (dự phòng khi AI chính lỗi), ngân sách, Dừng khẩn cấp và audit như mọi việc AI. Mỗi thành phẩm chỉ một lần viết cùng lúc; hủy được giữa chừng
+- Hướng dẫn theo nền tảng: bài Facebook, chú thích Instagram, kịch bản TikTok/Reels, tiêu đề và mô tả YouTube, quảng cáo Google (tiêu đề 30, mô tả 90 ký tự), blog SEO, mô tả sản phẩm Shopify, email; quảng cáo Meta khi loại là Nội dung quảng cáo
+- Kiểm tra sau khi viết: con số không có trong thông tin sản phẩm hoặc yêu cầu, và lời quảng cáo cần căn cứ (“tốt nhất”, “số 1”, “cam kết”, “chính hãng”…) bị ghi thành cảnh báo. Bản AI có cảnh báo không duyệt được cho tới khi người sửa và lưu phiên bản mới
+- Kết quả là phiên bản mới (bản nháp), ghi việc AI, nguồn gốc, chi phí; luôn cần người duyệt
+- Bản ngôn ngữ, thị trường hoặc nền tảng khác: `POST /api/v1/content/items/:id/variants` tạo thành phẩm mới liên kết với bản gốc, AI bản địa hóa (tiếng Việt ↔ tiếng Anh) hoặc chuyển thể từ chữ hiện tại và cùng thông tin sản phẩm
+- Web: ở Kho thành phẩm, phần “AI viết phiên bản mới”, “Các lần AI viết” (tiến độ, chi phí, cảnh báo, Hủy) và “Bản ngôn ngữ hoặc nền tảng khác”
+- Giới hạn: AI chưa đọc PDF hay video làm tài liệu; kiểm tra số liệu dựa trên so khớp chữ số, nên có thể báo nhầm (người sửa là xong); chưa tự tạo hàng loạt nhiều bản một lần
+
+## Sprint 16 – Kho nội dung gốc và Kho thành phẩm (Giai đoạn 6, đã merge)
 
 - Migration `0016`: schema `content` với `folders`, `assets` (nội dung gốc), `items` (thành phẩm), `item_versions` (RLS). Quyền `content.read` (mọi vai trò), `content.manage` (chủ, quản trị, quản lý), `content.approve` (chủ, quản trị)
 - Kho nội dung gốc (M09, đặc tả Phần 11): video, ảnh, âm thanh, tài liệu tải lên; văn bản, tham khảo, thông tin sản phẩm (tên, SKU, giá, thông số) nhập tay. Mỗi mục ghi nguồn, quyền sử dụng (của doanh nghiệp, có giấy phép, được cho phép, chưa rõ, không được dùng), chủ sở hữu, hạn quyền, tag, thư mục

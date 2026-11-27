@@ -348,10 +348,11 @@ describe('Sprint 16 (e2e): content libraries', () => {
       FROM identity.roles r JOIN identity.role_permissions rp ON rp.role_id = r.id
       WHERE rp.permission_key LIKE 'content.%' GROUP BY r.key`;
     const perms = Object.fromEntries(roles.map((r) => [r.key, r.perms]));
+    // content.generate (AI content writing) arrived in Sprint 17.
     expect(perms).toEqual({
-      owner: ['content.approve', 'content.manage', 'content.read'],
-      administrator: ['content.approve', 'content.manage', 'content.read'],
-      manager: ['content.manage', 'content.read'],
+      owner: ['content.approve', 'content.generate', 'content.manage', 'content.read'],
+      administrator: ['content.approve', 'content.generate', 'content.manage', 'content.read'],
+      manager: ['content.generate', 'content.manage', 'content.read'],
       member: ['content.read'],
     });
     const audit = await sql`SELECT action FROM security.audit_logs WHERE action LIKE 'content.%'`;

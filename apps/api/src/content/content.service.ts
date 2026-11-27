@@ -43,6 +43,7 @@ import {
   type CreateVersion,
   type FileInfo,
   type FolderResponse,
+  type GenerationResponse,
   type ItemDetailResponse,
   type ItemResponse,
   type ItemStatus,
@@ -69,6 +70,7 @@ const {
   contentAssets,
   contentItems,
   contentItemVersions,
+  contentGenerations,
   users,
   aiSkills,
   aiTasks,
@@ -77,6 +79,8 @@ const {
 type AssetRow = typeof contentAssets.$inferSelect;
 type ItemRow = typeof contentItems.$inferSelect;
 type VersionRow = typeof contentItemVersions.$inferSelect;
+type GenerationRow = typeof contentGenerations.$inferSelect;
+export type { ItemRow, AssetRow };
 
 /** Media the browser may show inline (with a sandboxing CSP). Everything else is a download. */
 const INLINE_MIME =
@@ -178,16 +182,14 @@ export class ContentService {
       if (body.parentId) await this.folder(tx, ctx, body.parentId, body.library);
       const id = uuidv7();
       try {
-        await tx
-          .insert(contentFolders)
-          .values({
-            id,
-            tenantId: ctx.tenantId,
-            library: body.library,
-            name: body.name,
-            parentId: body.parentId,
-            createdBy: ctx.userId,
-          });
+        await tx.insert(contentFolders).values({
+          id,
+          tenantId: ctx.tenantId,
+          library: body.library,
+          name: body.name,
+          parentId: body.parentId,
+          createdBy: ctx.userId,
+        });
       } catch (e) {
         throw duplicateName(e);
       }
@@ -498,7 +500,19 @@ export class ContentService {
 
   createItem(ctx: Ctx, raw: CreateItem): Promise<ItemDetailResponse> {
     const body = createItemSchema.parse(raw);
-    return this.db.withContext(ctx, async (tx) => {
+    return this.db.withContext(ctx, async (tx) =>
+      this.detail(tx, ctx, await this.createItemIn(tx, ctx, body, null)),
+    );
+  }
+
+  /** Creates an item inside the caller's transaction; variantOf links a language or platform copy. */
+  async createItemIn(
+    tx: Tx,
+    ctx: Ctx,
+    body: z.output<typeof createItemSchema>,
+    variantOf: string | null,
+  ): Promise<ItemRow> {
+    {
       if (body.folderId) await this.folder(tx, ctx, body.folderId, 'output');
       const id = uuidv7();
       let [row] = await tx
@@ -513,6 +527,7 @@ export class ContentService {
           market: body.market,
           platform: body.platform,
           tags: body.tags,
+          variantOf,
           createdBy: ctx.userId,
         })
         .returning();
@@ -520,10 +535,37 @@ export class ContentService {
         kind: body.kind,
         language: body.language,
         platform: body.platform,
+        ...(variantOf ? { variantOf } : {}),
       });
       if (body.body) row = await this.addVersion(tx, ctx, row!, { body: body.body }, body);
-      return this.detail(tx, ctx, row!);
-    });
+      return row!;
+    }
+  }
+
+  /** Adds a text version inside the caller's transaction (used by AI content writing). */
+  addTextVersionIn(
+    tx: Tx,
+    ctx: Ctx,
+    item: ItemRow,
+    body: string,
+    lineage: { sourceAssetIds: string[]; aiTaskId: string; note: string },
+  ): Promise<ItemRow> {
+    return this.addVersion(
+      tx,
+      ctx,
+      item,
+      { body },
+      { ...lineage, skillId: null, workflowRunId: null },
+    );
+  }
+
+  /** Reads (and with lock, locks) an item of the caller's tenant. */
+  itemIn(tx: Tx, ctx: Ctx, id: string, lock = false): Promise<ItemRow> {
+    return this.item(tx, ctx, id, lock);
+  }
+
+  detailIn(tx: Tx, ctx: Ctx, item: ItemRow): Promise<ItemDetailResponse> {
+    return this.detail(tx, ctx, item);
   }
 
   updateItem(ctx: Ctx, id: string, raw: UpdateItem): Promise<ItemDetailResponse> {
@@ -825,6 +867,7 @@ export class ContentService {
       ...(f ? { mime: f.type.mime, sizeBytes: f.size, sha256: f.sha256 } : {}),
       ...(lineage.skillId ? { skillId: lineage.skillId, skillVersion } : {}),
       ...(lineage.workflowRunId ? { workflowRunId: lineage.workflowRunId } : {}),
+      ...(lineage.aiTaskId ? { aiTaskId: lineage.aiTaskId } : {}),
     });
     return row!;
   }
@@ -902,22 +945,36 @@ export class ContentService {
         ),
       );
     if (!v) return ['chưa có phiên bản'];
-    if (v.sourceAssetIds.length === 0) return [];
+    const out: string[] = [];
+    if (v.aiTaskId) {
+      const [g] = await tx
+        .select({ warnings: contentGenerations.warnings })
+        .from(contentGenerations)
+        .where(eq(contentGenerations.taskId, v.aiTaskId));
+      if (g?.warnings.length)
+        out.push(
+          `phiên bản do AI viết có điểm chưa có căn cứ (${g.warnings.join('; ')}). Sửa lại rồi lưu thành phiên bản mới`,
+        );
+    }
+    if (v.sourceAssetIds.length === 0) return out;
     const sources = await tx
       .select()
       .from(contentAssets)
       .where(
         and(eq(contentAssets.tenantId, ctx.tenantId), inArray(contentAssets.id, v.sourceAssetIds)),
       );
-    return sources
-      .filter((s) => !rightsUsable(s.rightsStatus, s.rightsExpiresAt))
-      .map((s) =>
-        s.rightsStatus === 'restricted'
-          ? `nguồn “${s.title}” không được dùng`
-          : USABLE_RIGHTS.includes(s.rightsStatus)
-            ? `quyền dùng nguồn “${s.title}” đã hết hạn`
-            : `nguồn “${s.title}” chưa rõ quyền sử dụng`,
-      );
+    return [
+      ...out,
+      ...sources
+        .filter((s) => !rightsUsable(s.rightsStatus, s.rightsExpiresAt))
+        .map((s) =>
+          s.rightsStatus === 'restricted'
+            ? `nguồn “${s.title}” không được dùng`
+            : USABLE_RIGHTS.includes(s.rightsStatus)
+              ? `quyền dùng nguồn “${s.title}” đã hết hạn`
+              : `nguồn “${s.title}” chưa rõ quyền sử dụng`,
+        ),
+    ];
   }
 
   private async detail(tx: Tx, ctx: Ctx, item: ItemRow): Promise<ItemDetailResponse> {
@@ -944,14 +1001,46 @@ export class ContentService {
           .where(inArray(aiSkills.id, skillIds))
       : [];
     const skillName = new Map(skills.map((s) => [s.id, s.name]));
+    const generations = await tx
+      .select({ g: contentGenerations, progress: aiTasks.progress, costUsd: aiTasks.costUsd })
+      .from(contentGenerations)
+      .innerJoin(aiTasks, eq(aiTasks.id, contentGenerations.taskId))
+      .where(eq(contentGenerations.itemId, item.id))
+      .orderBy(desc(contentGenerations.createdAt))
+      .limit(20);
+    const warningsByTask = new Map(generations.map(({ g }) => [g.taskId, g.warnings]));
+    const variants = await tx
+      .select({
+        id: contentItems.id,
+        title: contentItems.title,
+        language: contentItems.language,
+        platform: contentItems.platform,
+        status: contentItems.status,
+      })
+      .from(contentItems)
+      .where(and(eq(contentItems.tenantId, ctx.tenantId), eq(contentItems.variantOf, item.id)))
+      .orderBy(desc(contentItems.createdAt));
     const names = await this.names(tx, [
       item.createdBy,
       item.reviewedBy,
       ...versions.map((v) => v.createdBy),
+      ...generations.map(({ g }) => g.createdBy),
     ]);
     return {
       ...itemResponse(item, names),
-      versions: versions.map((v) => versionResponse(v, sourceById, skillName, names)),
+      versions: versions.map((v) =>
+        versionResponse(
+          v,
+          sourceById,
+          skillName,
+          names,
+          v.aiTaskId ? warningsByTask.get(v.aiTaskId) : undefined,
+        ),
+      ),
+      generations: generations.map(({ g, progress, costUsd }) =>
+        generationResponse(g, names, g.status === 'running' ? progress : null, Number(costUsd)),
+      ),
+      variants,
       approvalBlockers:
         item.status === 'archived' || item.status === 'published'
           ? []
@@ -1110,9 +1199,39 @@ function itemResponse(r: ItemRow, names: Map<string, string>): ItemResponse {
     reviewedAt: r.reviewedAt?.toISOString() ?? null,
     publishedUrl: r.publishedUrl,
     publishedAt: r.publishedAt?.toISOString() ?? null,
+    variantOf: r.variantOf,
     createdByName: names.get(r.createdBy) ?? '',
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+export function generationResponse(
+  g: GenerationRow,
+  names: Map<string, string>,
+  progress: string | null,
+  costUsd: number,
+): GenerationResponse {
+  return {
+    id: g.id,
+    mode: g.mode,
+    status: g.status,
+    progress,
+    taskId: g.taskId,
+    fromItemId: g.fromItemId,
+    fromVersion: g.fromVersion,
+    productAssetIds: g.productAssetIds,
+    sourceAssetIds: g.sourceAssetIds,
+    brief: g.brief,
+    tone: g.tone,
+    version: g.version,
+    warnings: g.warnings,
+    costUsd,
+    errorCode: g.errorCode,
+    errorMessage: g.errorMessage,
+    createdByName: names.get(g.createdBy) ?? '',
+    createdAt: g.createdAt.toISOString(),
+    finishedAt: g.finishedAt?.toISOString() ?? null,
   };
 }
 
@@ -1121,6 +1240,7 @@ function versionResponse(
   sources: Map<string, AssetRow>,
   skills: Map<string, string>,
   names: Map<string, string>,
+  aiWarnings: string[] = [],
 ): VersionResponse {
   return {
     id: v.id,
@@ -1145,6 +1265,7 @@ function versionResponse(
     skillName: v.skillId ? (skills.get(v.skillId) ?? null) : null,
     workflowRunId: v.workflowRunId,
     aiTaskId: v.aiTaskId,
+    aiWarnings,
     note: v.note,
     createdByName: names.get(v.createdBy) ?? '',
     createdAt: v.createdAt.toISOString(),

@@ -23,6 +23,7 @@ import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
+import { AiWriter } from './AiWriter';
 
 const STATUS_CLS: Record<ItemStatus, string> = {
   draft: 'border-line text-muted',
@@ -75,9 +76,14 @@ function Version({ itemId, v, current }: { itemId: string; v: VersionResponse; c
         </span>
         {v.skillName && <span>· Skill: {v.skillName}</span>}
         {v.workflowRunId && <span>· từ Workflow</span>}
-        {v.aiTaskId && <span>· từ việc AI</span>}
+        {v.aiTaskId && <span>· do AI viết</span>}
       </div>
       {v.note && <p className="mb-2 text-xs italic text-muted">{v.note}</p>}
+      {v.aiWarnings.map((w) => (
+        <p key={w} className="mb-1 text-xs text-yellow-500">
+          ⚠ {w}
+        </p>
+      ))}
       {v.body && (
         <pre className="mb-2 max-h-72 overflow-auto whitespace-pre-wrap rounded border border-line bg-bg p-2 text-sm">
           {v.body}
@@ -519,11 +525,26 @@ function ItemsPage() {
             )}
           </div>
           {detail.approvalBlockers.length > 0 && detail.status !== 'draft' && (
-            <Notice kind="error">
-              Chưa duyệt được: {detail.approvalBlockers.join('; ')}. Cập nhật quyền ở Kho nội dung
-              gốc.
-            </Notice>
+            <Notice kind="error">Chưa duyệt được: {detail.approvalBlockers.join('; ')}.</Notice>
           )}
+          {detail.variantOf && (
+            <p className="mb-3 text-sm">
+              <span className="text-muted">Chuyển thể từ: </span>
+              <button
+                className="text-accent underline"
+                onClick={() => setSelected(detail.variantOf)}
+              >
+                {items.find((i) => i.id === detail.variantOf)?.title ?? 'bản gốc'}
+              </button>
+            </p>
+          )}
+          <AiWriter
+            detail={detail}
+            assets={assets}
+            onChange={(d, msg) => (msg ? done(d, msg) : setDetail(d))}
+            onOpen={setSelected}
+            onError={fail}
+          />
           {detail.reviewNote && (
             <p className="mb-3 text-sm">
               <span className="text-muted">Ghi chú duyệt ({detail.reviewedByName}):</span>{' '}
