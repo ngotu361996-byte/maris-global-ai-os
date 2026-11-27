@@ -108,6 +108,27 @@ export default function AiProvidersPage() {
     });
   }
 
+  /** Prices drive cost tracking and budgets, so they can be set after the AI was added. */
+  async function editPrices(p: AiProviderResponse) {
+    const ask = (label: string, current: number | null): number | null | undefined => {
+      const v = prompt(`${label} của ${p.name} (USD cho 1 triệu token, để trống nếu không tính):`, current === null ? '' : String(current));
+      if (v === null) return undefined;
+      const t = v.trim().replace(',', '.');
+      if (!t) return null;
+      const n = Number(t);
+      if (!Number.isFinite(n) || n < 0) {
+        setError(`${label} không hợp lệ: ${v}`);
+        return undefined;
+      }
+      return n;
+    };
+    const input = ask('Giá đầu vào', p.inputCostPerMtok);
+    if (input === undefined) return;
+    const output = ask('Giá đầu ra', p.outputCostPerMtok);
+    if (output === undefined) return;
+    await patch(p, { inputCostPerMtok: input, outputCostPerMtok: output }, `Đã lưu giá cho ${p.name}.`);
+  }
+
   async function test(p: AiProviderResponse) {
     await run(p.id, async () => {
       const r = await api<AiProviderTestResult>(`/ai/providers/${p.id}/test`, { method: 'POST' });
@@ -208,6 +229,13 @@ export default function AiProvidersPage() {
                       ) : (
                         <span className="font-mono text-xs">{p.defaultModel}</span>
                       )}
+                      <div className="mt-1 text-[11px] text-muted">
+                        {p.inputCostPerMtok === null && p.outputCostPerMtok === null ? (
+                          <span className="text-accent">Chưa nhập giá, chi phí tính là 0</span>
+                        ) : (
+                          `Giá $${p.inputCostPerMtok ?? 0} vào · $${p.outputCostPerMtok ?? 0} ra / 1 triệu token`
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 text-xs text-muted">{secretName(p.secretRef)}</td>
                     <td className="py-2 text-xs">
@@ -228,6 +256,9 @@ export default function AiProvidersPage() {
                         </button>
                         <button disabled={!!busy} onClick={() => loadModels(p)} className={btnGhostCls}>
                           Chọn model
+                        </button>
+                        <button disabled={!!busy} onClick={() => editPrices(p)} className={btnGhostCls}>
+                          Giá
                         </button>
                         <button
                           disabled={!!busy}
