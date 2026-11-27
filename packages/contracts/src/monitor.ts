@@ -34,8 +34,13 @@ export const QUEUE_LABEL: Record<string, string> = {
   'maris-plans': 'Kế hoạch AI',
   'maris-council': 'Hội đồng AI',
   'maris-workflows': 'Workflow',
-  'maris-events': 'Sự kiện (outbox)',
+  'maris-events': 'Sự kiện (lưu cho dịch vụ sau)',
 };
+/**
+ * Queues that hold events for services added later (Part 9 event bus). Nothing reads them yet, so
+ * their waiting count grows by design and is shown but not counted as a backlog.
+ */
+export const EVENT_LOG_QUEUES: readonly string[] = ['maris-events'];
 
 export interface MonitorCheck {
   key: string;

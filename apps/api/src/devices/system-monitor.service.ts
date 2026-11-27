@@ -3,6 +3,7 @@ import { Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { sql } from 'drizzle-orm';
 import {
+  EVENT_LOG_QUEUES,
   MONITOR_LIMITS,
   QUEUE_LABEL,
   type CheckStatus,
@@ -310,8 +311,9 @@ export function buildChecks(s: {
   if (!s.queues) add('queues', 'Hàng đợi', 'error', 'Không đọc được hàng đợi');
   else {
     const failed = s.queues.reduce((x, q) => x + q.failed, 0);
-    const waiting = s.queues.reduce((x, q) => x + q.waiting + q.delayed, 0);
-    const busy = s.queues.filter((q) => q.waiting + q.delayed >= L.queueWaitingWarn);
+    const work = s.queues.filter((q) => !EVENT_LOG_QUEUES.includes(q.name));
+    const waiting = work.reduce((x, q) => x + q.waiting + q.delayed, 0);
+    const busy = work.filter((q) => q.waiting + q.delayed >= L.queueWaitingWarn);
     add(
       'queues',
       'Hàng đợi',

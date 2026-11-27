@@ -18,6 +18,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { PluginsModule } from './plugins/plugins.module';
 import { DevicesModule } from './devices/devices.module';
+import { ContentModule } from './content/content.module';
 
 @Module({})
 export class AppModule {
@@ -25,7 +26,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule],
+      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule, ContentModule],
       controllers: [HealthController, TenantsController, RolesController],
       providers: [{ provide: APP_CONFIG, useValue: config }, { provide: APP_GUARD, useClass: RateLimitGuard }],
       exports: [APP_CONFIG],

@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Sprint 15, sprint cuối)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 16)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -8,8 +8,9 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
-| 5. Hạ tầng | Sprint 13–14 đã merge; Sprint 15 (sandbox chạy mã, giám sát hệ thống) đang review. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6–14 | Chưa bắt đầu |
+| 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
+| 6. Content Factory | Sprint 16 (kho nội dung gốc và thành phẩm) đang review; kế tiếp: 17 AI viết nội dung, 18 xử lý ảnh, 19 xử lý video, 20 kiểm định và nghiệm thu |
+| 7–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
 
@@ -130,7 +131,22 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **5 – Hạ tầng (Spri
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 15 – Sandbox chạy mã và giám sát hệ thống (Giai đoạn 5)
+## Sprint 16 – Kho nội dung gốc và Kho thành phẩm (Giai đoạn 6)
+
+- Migration `0016`: schema `content` với `folders`, `assets` (nội dung gốc), `items` (thành phẩm), `item_versions` (RLS). Quyền `content.read` (mọi vai trò), `content.manage` (chủ, quản trị, quản lý), `content.approve` (chủ, quản trị)
+- Kho nội dung gốc (M09, đặc tả Phần 11): video, ảnh, âm thanh, tài liệu tải lên; văn bản, tham khảo, thông tin sản phẩm (tên, SKU, giá, thông số) nhập tay. Mỗi mục ghi nguồn, quyền sử dụng (của doanh nghiệp, có giấy phép, được cho phép, chưa rõ, không được dùng), chủ sở hữu, hạn quyền, tag, thư mục
+- Không ghi đè bản gốc: chỉ sửa được mô tả, thư mục, tag và quyền; trigger trong database chặn mọi thay đổi tệp, nội dung, thông tin sản phẩm. Lưu trữ thay vì xóa
+- Tải tệp lớn: truyền thẳng xuống đĩa (mặc định tối đa 2 GB, `CONTENT_MAX_MB`), băm SHA-256 khi ghi, nhận dạng loại từ nội dung tệp. Trùng nội dung (cùng SHA-256) bị từ chối và chỉ ra bản đã có
+- Xác minh thông tin sản phẩm (người có `content.approve`), để AI ở Sprint 17 chỉ dùng thông tin đã xác minh
+- Kho thành phẩm (M10): loại, ngôn ngữ, thị trường, nền tảng. Mỗi lần sửa là phiên bản mới (văn bản hoặc tệp), phiên bản cũ giữ nguyên (chỉ cho INSERT). Mỗi phiên bản ghi nội dung gốc đã dùng, Skill (kèm phiên bản Skill), lượt Workflow, việc AI, người tạo
+- Quy trình: Bản nháp → Chờ duyệt → Đã duyệt → Đã xuất bản (kèm đường dẫn), hoặc Bị từ chối, Lưu trữ. Không duyệt được khi một nguồn chưa rõ quyền, không được dùng hay hết hạn quyền. Sửa sau khi duyệt thì trở về bản nháp. Đã xuất bản thì khóa
+- Tìm kiếm theo tên, mô tả, tag; lọc theo loại, quyền, thư mục, trạng thái, nền tảng; tra ngược thành phẩm nào dùng một nội dung gốc
+- Tải về luôn kèm `Content-Security-Policy: sandbox` và `nosniff`; chỉ ảnh, video, âm thanh được xem ngay trong trang
+- Web: `/content` (Kho nội dung gốc), `/content/items` (Kho thành phẩm)
+- Giám sát: hàng đợi sự kiện `maris-events` (lưu cho dịch vụ sau, chưa có nơi nhận) không còn bị tính là ùn
+- Giới hạn: chưa có AI viết nội dung (Sprint 17), chưa xử lý ảnh/video (Sprint 18–19), chưa nhập từ Connector tự động; lưu trữ trên đĩa máy chủ (S3/MinIO sau)
+
+## Sprint 15 – Sandbox chạy mã và giám sát hệ thống (Giai đoạn 5, đã merge)
 
 - Migration `0015`: quyền `infra.code` (“chạy mã”), chỉ cấp sẵn cho owner và administrator
 - Loại việc `code.run`: chạy Python 3.12 hoặc Node.js 22. Mã tối đa 50.000 ký tự, stdin tối đa 10.000, thời gian tối đa 600 giây (mặc định 120)

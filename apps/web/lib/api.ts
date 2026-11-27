@@ -79,6 +79,11 @@ export async function apiStream<E>(path: string, body: unknown, onEvent: (event:
 
 /** Uploads one file as the raw body; the server detects its type from the content. */
 export async function uploadFile<T>(file: File): Promise<T> {
+  return uploadTo<T>('/ai/files', file);
+}
+
+/** Uploads one file as the raw body to any upload endpoint (path may carry query parameters). */
+export async function uploadTo<T>(path: string, file: File): Promise<T> {
   const headers = new Headers({
     'Content-Type': 'application/octet-stream',
     'X-File-Name': encodeURIComponent(file.name),
@@ -87,11 +92,21 @@ export async function uploadFile<T>(file: File): Promise<T> {
   });
   const tenant = session.tenant();
   if (tenant) headers.set('X-Tenant-Id', tenant);
-  const res = await fetch(`${API_URL}/ai/files`, { method: 'POST', headers, body: file, credentials: 'include' });
+  const res = await fetch(`${API_URL}${path}`, { method: 'POST', headers, body: file, credentials: 'include' });
   const body = (await res.json().catch(() => ({}))) as T | ApiError;
   if (!res.ok) {
     const err = (body as ApiError).error ?? { code: 'NETWORK', message: 'Không kết nối được API' };
     throw new ApiRequestError(res.status, err.code, err.message);
   }
   return body as T;
+}
+
+/** Downloads a file the session may read and returns a local object URL (revoke it when done). */
+export async function fileUrl(path: string): Promise<string> {
+  const headers = new Headers({ 'X-MARIS-Session': 'cookie', 'X-MARIS-CSRF': '1' });
+  const tenant = session.tenant();
+  if (tenant) headers.set('X-Tenant-Id', tenant);
+  const res = await fetch(`${API_URL}${path}`, { headers, credentials: 'include' });
+  if (!res.ok) throw new ApiRequestError(res.status, 'FILE', 'Không tải được tệp');
+  return URL.createObjectURL(await res.blob());
 }
