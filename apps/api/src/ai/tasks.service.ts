@@ -3,7 +3,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import type Redis from 'ioredis';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
-import { MODE_CAPABILITY, type AiActivityResponse, type CreateTask, type TaskResponse, type TaskStatus as AiTaskStatus } from '@maris/contracts';
+import { ACCESS_LEVEL_LABEL, levelAtLeast, MODE_CAPABILITY, type AccessLevel, type AiActivityResponse, type CreateTask, type TaskResponse, type TaskStatus as AiTaskStatus } from '@maris/contracts';
 import { AuditService } from '../audit/audit.service';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { DbService, type Tx } from '../db/db.service';
@@ -111,30 +111,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   create(ctx: Ctx, body: CreateTask): Promise<TaskResponse> {
-    return this.db.withContext(ctx, async (tx) => {
-      if (body.agentId) await this.agents.get(tx, ctx.tenantId, body.agentId);
-      if (body.projectId) await this.memory.project(tx, ctx.tenantId, body.projectId);
-      const [row] = await tx
-        .insert(aiTasks)
-        .values({
-          id: uuidv7(),
-          tenantId: ctx.tenantId,
-          createdBy: ctx.userId,
-          title: body.title,
-          goal: body.goal,
-          scope: body.scope,
-          successCriteria: body.successCriteria,
-          permissions: ['ai.generate_text'],
-          budgetUsd: String(body.budgetUsd),
-          agentId: body.agentId ?? null,
-          projectId: body.projectId ?? null,
-          conversationId: body.conversationId ?? null,
-        })
-        .returning();
-      await this.log(tx, ctx, 'ai.task.created', row!.id, { budgetUsd: body.budgetUsd });
-      await this.outbox.enqueue(tx, { tenantId: ctx.tenantId, type: 'ai.task.created', payload: { taskId: row!.id } });
-      return taskResponse(row!);
-    });
+    return this.db.withContext(ctx, async (tx) => taskResponse(await this.insert(tx, ctx, body)));
+  }
+
+  /** Creates a pending task. Also used by AI Central Command for the steps of an accepted plan. */
+  async insert(tx: Tx, ctx: Ctx, body: CreateTask & { planId?: string; stepIndex?: number }): Promise<TaskRow> {
+    const requiredLevel = body.requiredLevel ?? 'prepare';
+    if (body.agentId) assertLevel(await this.agents.get(tx, ctx.tenantId, body.agentId), requiredLevel);
+    if (body.projectId) await this.memory.project(tx, ctx.tenantId, body.projectId);
+    const [row] = await tx
+      .insert(aiTasks)
+      .values({
+        id: uuidv7(),
+        tenantId: ctx.tenantId,
+        createdBy: ctx.userId,
+        title: body.title,
+        goal: body.goal,
+        scope: body.scope,
+        successCriteria: body.successCriteria,
+        permissions: ['ai.generate_text'],
+        budgetUsd: String(body.budgetUsd),
+        agentId: body.agentId ?? null,
+        projectId: body.projectId ?? null,
+        conversationId: body.conversationId ?? null,
+        planId: body.planId ?? null,
+        stepIndex: body.stepIndex ?? null,
+        requiredLevel,
+      })
+      .returning();
+    await this.log(tx, ctx, 'ai.task.created', row!.id, { budgetUsd: body.budgetUsd, requiredLevel, planId: body.planId ?? null });
+    await this.outbox.enqueue(tx, { tenantId: ctx.tenantId, type: 'ai.task.created', payload: { taskId: row!.id } });
+    return row!;
   }
 
   async approve(ctx: Ctx, id: string, note: string | null): Promise<TaskResponse> {
@@ -224,6 +231,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
         const agent = claimed.agentId ? await this.agents.get(tx, job.tenantId, claimed.agentId) : null;
         if (agent && agent.status !== 'active') throw new BadRequestException({ code: 'AI_AGENT_PAUSED', message: `${agent.name} đang tạm dừng` });
+        // Checked again at run time: an administrator may have lowered the agent's level since.
+        if (agent) assertLevel(agent, claimed.requiredLevel);
         const project = claimed.projectId ? await this.memory.project(tx, job.tenantId, claimed.projectId) : null;
         const memory = project ? await this.memory.promptBlock(tx, project) : null;
         const rows = (await this.providers.rows(tx, job.tenantId)).filter((p) => p.enabled);
@@ -360,6 +369,16 @@ function expectStatus(task: TaskRow, allowed: AiTaskStatus[]): void {
   }
 }
 
+/** An agent may only take work at or below its access level, which only a person can change. */
+export function assertLevel(agent: { name: string; accessLevel: AccessLevel }, needs: AccessLevel): void {
+  if (!levelAtLeast(agent.accessLevel, needs)) {
+    throw new BadRequestException({
+      code: 'AGENT_LEVEL_TOO_LOW',
+      message: `${agent.name} có quyền "${ACCESS_LEVEL_LABEL[agent.accessLevel]}", công việc cần "${ACCESS_LEVEL_LABEL[needs]}"`,
+    });
+  }
+}
+
 function assertOwnerOrApprover(task: TaskRow, ctx: Ctx, canApprove: boolean): void {
   if (task.createdBy !== ctx.userId && !canApprove) {
     throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Chỉ người tạo hoặc người có quyền phê duyệt mới làm được' });
@@ -367,11 +386,12 @@ function assertOwnerOrApprover(task: TaskRow, ctx: Ctx, canApprove: boolean): vo
 }
 
 /** The task, as the AI sees it. The fields are the tenant's own text, framed as the work to do. */
-export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria'>): string {
+export function taskPrompt(t: Pick<TaskRow, 'title' | 'goal' | 'scope' | 'successCriteria' | 'requiredLevel'>): string {
   return [
     'Thực hiện công việc đã được phê duyệt dưới đây và trả về sản phẩm hoàn chỉnh (văn bản).',
     'Quyền hạn: chỉ được soạn nội dung văn bản; không thực hiện, không giả vờ đã thực hiện hành động bên ngoài (đăng bài, gửi tin, chi tiền, sửa dữ liệu).',
     'Nếu một phần cần hành động bên ngoài, ghi rõ bước đó để người dùng tự làm hoặc duyệt ở giai đoạn sau.',
+    `Mức quyền của công việc: ${ACCESS_LEVEL_LABEL[t.requiredLevel]}`,
     `Tên công việc: ${t.title}`,
     `Mục tiêu: ${t.goal}`,
     `Phạm vi: ${t.scope}`,
@@ -392,6 +412,9 @@ export function taskResponse(r: TaskRow): TaskResponse {
     agentId: r.agentId,
     projectId: r.projectId,
     conversationId: r.conversationId,
+    planId: r.planId,
+    stepIndex: r.stepIndex,
+    requiredLevel: r.requiredLevel as TaskResponse['requiredLevel'],
     status: r.status,
     progress: r.progress,
     createdBy: r.createdBy,

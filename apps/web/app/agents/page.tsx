@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import type { AgentResponse, AgentVersionResponse, AiProviderResponse } from '@maris/contracts';
+import { ACCESS_LEVEL_LABEL, ACCESS_LEVELS, type AccessLevel, type AgentResponse, type AgentVersionResponse, type AiProviderResponse } from '@maris/contracts';
 import { Shell } from '@/components/Shell';
 import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -60,6 +60,7 @@ export default function AgentsPage() {
       evalCriteria: text('evalCriteria') || null,
       providerId: text('providerId') || null,
       model: model || null,
+      accessLevel: (text('accessLevel') || 'prepare') as AccessLevel,
     };
   }
 
@@ -149,7 +150,7 @@ export default function AgentsPage() {
                     </div>
                     <div className="text-xs text-muted">{a.role}</div>
                     <div className="text-[11px] text-muted">
-                      {providerName(a.providerId)}
+                      Quyền: {ACCESS_LEVEL_LABEL[a.accessLevel]} · {providerName(a.providerId)}
                       {a.model ? ` · ${a.model}` : ''}
                     </div>
                   </div>
@@ -245,6 +246,16 @@ function AgentFields({ agent, providers }: { agent?: AgentResponse; providers: A
           <input name="model" maxLength={200} defaultValue={agent?.model ?? ''} className={`${inputCls} mt-1`} />
         </label>
       </div>
+      <label className="text-sm">
+        Mức quyền (AI không tự nâng được; hiện mọi Agent chỉ soạn văn bản, các mức từ Thực thi trở lên dùng ở giai đoạn sau)
+        <select name="accessLevel" defaultValue={agent?.accessLevel ?? 'prepare'} className={`${inputCls} mt-1`}>
+          {ACCESS_LEVELS.map((l) => (
+            <option key={l} value={l}>
+              {ACCESS_LEVEL_LABEL[l]}
+            </option>
+          ))}
+        </select>
+      </label>
     </>
   );
 }

@@ -215,8 +215,11 @@ export const aiProviderCalls = ai.table('provider_calls', {
   latencyMs: integer('latency_ms'),
   taskId: uuid('task_id'),
   councilId: uuid('council_id'),
+  planId: uuid('plan_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+export type AiAccessLevel = 'read' | 'analyze' | 'plan' | 'prepare' | 'execute' | 'control' | 'develop' | 'deploy';
 
 export const aiAgents = ai.table('agents', {
   id: uuid('id').primaryKey(),
@@ -230,6 +233,7 @@ export const aiAgents = ai.table('agents', {
   model: text('model'),
   status: text('status').$type<'active' | 'paused'>().notNull().default('active'),
   templateKey: text('template_key'),
+  accessLevel: text('access_level').$type<AiAccessLevel>().notNull().default('prepare'),
   version: integer('version').notNull().default(1),
   createdBy: uuid('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
@@ -286,6 +290,9 @@ export const aiTasks = ai.table('tasks', {
   agentId: uuid('agent_id'),
   projectId: uuid('project_id'),
   conversationId: uuid('conversation_id'),
+  planId: uuid('plan_id'),
+  stepIndex: integer('step_index'),
+  requiredLevel: text('required_level').$type<AiAccessLevel>().notNull().default('prepare'),
   status: text('status').$type<AiTaskStatus>().notNull().default('pending'),
   progress: text('progress'),
   approvedBy: uuid('approved_by'),
@@ -403,4 +410,36 @@ export const aiFiles = ai.table('files', {
   messageId: uuid('message_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
   deletedAt: ts('deleted_at'),
+});
+
+export type AiPlanStatus = 'planning' | 'proposed' | 'accepted' | 'discarded' | 'failed';
+export interface AiPlanStep {
+  title: string;
+  goal: string;
+  scope: string;
+  successCriteria: string;
+  agentId: string | null;
+  requiredLevel: AiAccessLevel;
+  budgetUsd: number;
+  note: string | null;
+}
+
+export const aiPlans = ai.table('plans', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  goal: text('goal').notNull(),
+  projectId: uuid('project_id'),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).notNull(),
+  status: text('status').$type<AiPlanStatus>().notNull().default('planning'),
+  summary: text('summary'),
+  steps: jsonb('steps').$type<AiPlanStep[]>().notNull().default([]),
+  reportStatus: text('report_status').$type<'running' | 'completed' | 'failed'>(),
+  report: text('report'),
+  costUsd: numeric('cost_usd', { precision: 14, scale: 6 }).notNull().default('0'),
+  errorCode: text('error_code'),
+  acceptedBy: uuid('accepted_by'),
+  acceptedAt: ts('accepted_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
 });

@@ -16,6 +16,8 @@ export interface FakeRequest {
 export class FakeAi {
   readonly requests: FakeRequest[] = [];
   readonly modes: Record<string, FakeMode> = {};
+  /** When set and it returns text, OpenAI-compatible requests stream that text instead of "Xin chào". */
+  reply?: (body: any) => string | null;
   private server!: Server;
   private sockets = new Set<import('node:net').Socket>();
   baseUrl = '';
@@ -83,6 +85,14 @@ export class FakeAi {
       return;
     }
     // OpenAI-compatible
+    const custom = this.reply?.(this.requests.at(-1)!.body);
+    if (custom != null && mode === 'ok') {
+      send({ choices: [{ delta: { content: custom } }] });
+      send({ choices: [], usage: { prompt_tokens: 1000, completion_tokens: 500 } });
+      send('[DONE]');
+      res.end();
+      return;
+    }
     send({ choices: [{ delta: { content: 'Xin' } }] });
     if (mode === 'midfail') {
       // Let the first chunk reach the client, then drop the connection.

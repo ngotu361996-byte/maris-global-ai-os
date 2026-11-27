@@ -1,12 +1,12 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 6)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Command (Sprint 8)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
-| 3. AI Central Command | Sprint 3, 4, 5 đã merge; Sprint 6 (Hội đồng AI, Danh mục model) đang review; Sprint 7 (tải tệp, giọng nói) đang review |
+| 3. AI Central Command | Sprint 3–7 đã merge; Sprint 8 (AI Tổng điều hành, mức quyền Agent) đang review |
 | 4–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -82,3 +82,12 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **3 – AI Central Comman
 - Chat: nút 📎 hoặc dán ảnh vào ô nhập để đính kèm (tối đa 8 tệp mỗi tin). AI đọc được ảnh (tới 5 MB, gửi dạng ảnh cho OpenAI/Anthropic/Gemini) và văn bản (tổng 100.000 ký tự, đặt trong thẻ `<attached_file>` như dữ liệu, không như lệnh). PDF, Office, video, âm thanh được lưu và ghi chú cho AI là chưa đọc được
 - Nút 🎤: nhận dạng giọng nói tiếng Việt của trình duyệt (Edge, Chrome). Âm thanh đi tới dịch vụ nhận dạng của hãng trình duyệt, không qua MARIS; nút ghi rõ điều này
 - Giới hạn: chưa đọc nội dung PDF/Word/Excel, chưa chép lời video/âm thanh; tệp chưa đính kèm không tự xóa. Sao lưu thư mục `data/uploads` cùng với `.env`
+
+## Sprint 8 – AI Tổng điều hành và mức quyền Agent (Giai đoạn 3)
+
+- Migration `0008`: `ai.plans`; cột `access_level` cho `ai.agents`; `plan_id`, `step_index`, `required_level` cho `ai.tasks`; `plan_id` cho `ai.provider_calls`
+- Mức quyền theo đặc tả Phần 06: Chỉ đọc < Phân tích < Lập kế hoạch < Chuẩn bị < Thực thi < Điều khiển < Phát triển < Phát hành. Chỉ người có `ai.manage` đổi được mức quyền của Agent (ghi audit riêng `ai.agent.access_level_changed`); AI không đổi được. Công việc ở giai đoạn này chỉ cần tối đa “Chuẩn bị” vì AI chỉ soạn văn bản. Agent dưới mức công việc cần thì bị từ chối khi tạo việc và khi chạy
+- Trang `/command`: nhập mục tiêu kinh doanh, ngân sách và dự án → MARIS lập kế hoạch 1–8 bước (hàng đợi `maris-plans`), giao mỗi bước cho Agent đang bật có đủ quyền. Kế hoạch do AI trả về được kiểm tra lại: Agent không tồn tại hoặc thiếu quyền thì bỏ giao và ghi lý do; ngân sách các bước được thu lại cho vừa tổng
+- Người tạo hoặc người duyệt bấm tạo công việc: mỗi bước thành một công việc chờ duyệt (một transaction, không tạo trùng). Duyệt từng việc như trước; trang hiện tiến độ và kết quả từng bước
+- Khi mọi việc đã kết thúc, MARIS tổng hợp báo cáo (kết quả, việc chưa xong, rủi ro, đề xuất cải tiến, bước tiếp theo cần duyệt). Kết quả công việc được đưa vào thẻ `<task_result>` như dữ liệu
+- Giới hạn: chưa sửa được từng bước trước khi tạo công việc (bỏ kế hoạch và lập lại); các bước chạy độc lập, chưa có thứ tự phụ thuộc; chưa có Skill/Workflow/Worker để chọn (Giai đoạn 4–5)
