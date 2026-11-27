@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
 import {
   CHAT_MODE_INFO,
+  MODE_CAPABILITY,
   type ChatMode,
   type ChatMessageResponse,
   ChatStreamEvent,
@@ -23,6 +24,7 @@ import { AiRouterService, type Candidate, type ProviderRow } from './ai-router.s
 import { ControlService, estopKey } from './control.service';
 import { CostGovernorService } from './cost-governor.service';
 import { MemoryService } from './memory.service';
+import { applyRegistry, ModelsService } from './models.service';
 
 const { aiConversations, aiMessages, aiProviderCalls } = schema;
 type ConversationRow = typeof aiConversations.$inferSelect;
@@ -60,6 +62,7 @@ export class ChatService {
     private readonly memory: MemoryService,
     private readonly control: ControlService,
     private readonly governor: CostGovernorService,
+    private readonly models: ModelsService,
   ) {}
 
   list(ctx: Ctx): Promise<ConversationResponse[]> {
@@ -231,7 +234,9 @@ export class ChatService {
       const rows = (await this.providers.rows(tx, ctx.tenantId)).filter((p) => p.enabled);
       // A provider chosen in the conversation wins over the agent's own choice.
       const ordered = providerId ? orderCandidates(rows, providerId, model) : orderCandidates(rows, agent?.providerId ?? null, agent?.model ?? model);
-      const candidates = await this.governor.filter(tx, ctx.tenantId, ordered);
+      // The Model Registry picks the model the chat mode prefers, drops disabled models and sets prices.
+      const registered = applyRegistry(ordered, await this.models.rows(tx, ctx.tenantId), MODE_CAPABILITY[conv.mode]);
+      const candidates = await this.governor.filter(tx, ctx.tenantId, registered);
       const system = systemPrompt({ mode: conv.mode, agent, memory });
       const messages = buildTurns(history.reverse(), body.content, system);
       return { userMessageId: userMessage.id, assistantId, candidates, messages };
@@ -343,12 +348,15 @@ export class ChatService {
   }
 }
 
-/** Chosen provider first (with the chosen model), then the rest of the failover order with their default models. */
+/**
+ * Chosen provider first (with the chosen model), then the rest of the failover order with their
+ * default models. A model named here is pinned, so the Model Registry will not swap it.
+ */
 export function orderCandidates(enabled: ProviderRow[], providerId: string | null, model: string | null): Candidate[] {
   const chosen = providerId ? enabled.find((p) => p.id === providerId) : undefined;
   const rest = enabled.filter((p) => p !== chosen);
   return [
-    ...(chosen ? [{ provider: chosen, model: model ?? chosen.defaultModel }] : []),
+    ...(chosen ? [{ provider: chosen, model: model ?? chosen.defaultModel, ...(model ? { pinned: true } : {}) }] : []),
     ...rest.map((p) => ({ provider: p, model: p.defaultModel })),
   ];
 }

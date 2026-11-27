@@ -8,3 +8,5 @@ export * from './ai';
 export * from './chat-modes';
 export * from './agents';
 export * from './tasks';
+export * from './models';
+export * from './council';

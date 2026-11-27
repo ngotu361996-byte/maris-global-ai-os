@@ -38,6 +38,15 @@ hủy và Dừng khẩn cấp đặt cờ Redis (`ai:task:abort:<id>`, `ai:estop
 ngắt lời gọi AI. Bảng `ai.controls` là nguồn sự thật cho Dừng khẩn cấp; cờ Redis chỉ đặt sau khi transaction đã commit.
 Cost Governor đọc chi phí tháng từ `ai.provider_calls` trước mỗi lượt chat và mỗi lần chạy việc.
 
+Model Registry (`models.service.ts`, `applyRegistry`): sau khi xếp thứ tự provider, mỗi ứng viên chưa bị ghim model sẽ đổi sang
+model đang bật có khả năng mà chế độ chat cần (`MODE_CAPABILITY`), model tắt bị bỏ, giá của model gắn vào ứng viên và router
+dùng giá đó thay giá provider. Thứ tự: `orderCandidates` → `applyRegistry` → `CostGovernor.filter`.
+
+Hội đồng AI (`council.service.ts`): hàng đợi `maris-council`. Mỗi bước (trả lời, phản biện, tổng hợp) lấy lại ứng viên của từng
+thành viên (provider còn bật, registry, ngân sách), gọi router song song với một ứng viên mỗi thành viên (bước tổng hợp dùng các
+thành viên làm dự phòng), ghi `ai.council_turns` và `ai.provider_calls` (`council_id`). Chi phí cộng dồn bằng SQL vì các lượt
+chạy song song. Câu trả lời của AI khác được đưa vào trong thẻ `<answer>`/`<critique>` (đã lọc thẻ) như dữ liệu, không như lệnh.
+
 ## Dữ liệu
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `maris_ctx` (hàm ngữ cảnh).

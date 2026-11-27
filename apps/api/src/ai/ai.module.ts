@@ -13,12 +13,15 @@ import { ControlService } from './control.service';
 import { CostGovernorService } from './cost-governor.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
+import { CouncilController } from './council.controller';
+import { CouncilService } from './council.service';
+import { ModelsService } from './models.service';
 
 /** Phase 3: AI Provider Gateway, AI Router with failover, AI Chat, AI Agents, project memory,
- * Structured Tasks with approval, Emergency Stop and the Cost Governor. */
+ * Structured Tasks with approval, Emergency Stop, the Cost Governor, the Model Registry and the AI Council. */
 @Module({
-  controllers: [AiProvidersController, ChatController, AgentsController, MemoryController, TasksController],
-  providers: [AiProvidersService, AiRouterService, ChatService, CircuitBreakerService, AgentsService, MemoryService, ControlService, CostGovernorService, TasksService],
+  controllers: [AiProvidersController, ChatController, AgentsController, MemoryController, TasksController, CouncilController],
+  providers: [AiProvidersService, AiRouterService, ChatService, CircuitBreakerService, AgentsService, MemoryService, ControlService, CostGovernorService, TasksService, ModelsService, CouncilService],
   exports: [AiRouterService, AiProvidersService],
 })
 export class AiModule {}
