@@ -63,6 +63,14 @@ export default function AiProvidersPage() {
     const form = e.currentTarget;
     const f = new FormData(form);
     const num = (k: string) => (String(f.get(k) ?? '').trim() === '' ? null : Number(f.get(k)));
+    const model = String(f.get('defaultModel')).trim();
+    if (/^(sk-|sk_|rk-|AIza|xai-|gsk_)/.test(model) || model.length >= 120) {
+      // Never send a pasted key anywhere but the Secret Vault.
+      (form.elements.namedItem('defaultModel') as HTMLInputElement).value = '';
+      setOk(null);
+      setError('Ô “Model mặc định” đang chứa một API key. Đã xóa nó khỏi ô. Key chỉ dán vào Secret Vault; nếu key đã lộ, hãy xóa nó trên trang của nhà cung cấp và tạo key mới.');
+      return;
+    }
     await run('add', async () => {
       const created = await api<AiProviderResponse>('/ai/providers', {
         method: 'POST',
@@ -71,7 +79,7 @@ export default function AiProvidersPage() {
           name: String(f.get('name')).trim(),
           baseUrl: String(f.get('baseUrl') ?? '').trim() || null,
           secretRef: String(f.get('secretRef') ?? '') || null,
-          defaultModel: String(f.get('defaultModel')).trim(),
+          defaultModel: model,
           inputCostPerMtok: num('inputCost'),
           outputCostPerMtok: num('outputCost'),
         }),
@@ -136,8 +144,11 @@ export default function AiProvidersPage() {
         Danh sách AI mà MARIS dùng. AI đứng đầu là AI chính; khi AI chính lỗi hoặc quá thời gian, MARIS tự chuyển sang AI kế tiếp.
         Key nằm trong Secret Vault, trang này chỉ chọn key theo tên và không bao giờ hiển thị giá trị.
       </p>
-      {error && <Notice kind="error">{error}</Notice>}
-      {ok && <Notice kind="ok">{ok}</Notice>}
+      {/* Sticky so the result of a button far down the page is always visible. */}
+      <div className="sticky top-0 z-10 bg-bg">
+        {error && <Notice kind="error">{error}</Notice>}
+        {ok && <Notice kind="ok">{ok}</Notice>}
+      </div>
 
       <Panel title="Thứ tự AI (trên cùng là AI chính)">
         {providers.length === 0 ? (

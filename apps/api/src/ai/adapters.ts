@@ -53,16 +53,25 @@ async function getJson<T>(url: string, headers: Record<string, string>, signal: 
   return (await res.json()) as T;
 }
 
-/** Short, key-free description of an error body. */
+/** Short, key-free description of an error body (shown to the user and logged). */
 async function errorDetail(res: Response): Promise<string> {
   const text = await res.text().catch(() => '');
+  let m: string;
   try {
     const j = JSON.parse(text) as { error?: { message?: string } | string; message?: string };
-    const m = typeof j.error === 'string' ? j.error : (j.error?.message ?? j.message ?? '');
-    return String(m).slice(0, 300);
+    m = String(typeof j.error === 'string' ? j.error : (j.error?.message ?? j.message ?? ''));
   } catch {
-    return text.slice(0, 300);
+    m = text;
   }
+  return redactKeys(m).slice(0, 300);
+}
+
+/** Providers sometimes echo part of the key in error messages; never pass that on. */
+export function redactKeys(text: string): string {
+  return text
+    .replace(/\b(sk|rk|pk)-[A-Za-z0-9_*\-]{6,}/g, '$1-***')
+    .replace(/\bAIza[0-9A-Za-z_\-]{10,}/g, 'AIza***')
+    .replace(/\b[A-Za-z0-9_\-]{32,}\b/g, '***');
 }
 
 /** Parses a server-sent-events body into { event, data } records. */
@@ -108,7 +117,7 @@ function parse<T>(data: string): T {
 
 function streamError(err: unknown): ProviderError {
   const e = err as { message?: string; type?: string; code?: string | number } | string;
-  const msg = typeof e === 'string' ? e : (e?.message ?? 'lỗi từ provider');
+  const msg = redactKeys(String(typeof e === 'string' ? e : (e?.message ?? 'lỗi từ provider'))).slice(0, 300);
   const type = typeof e === 'string' ? '' : String(e?.type ?? e?.code ?? '');
   if (/rate|overloaded|429|529/i.test(type)) return new ProviderError('RATE_LIMIT', msg);
   if (/auth|permission|401|403/i.test(type)) return new ProviderError('AUTH', msg);

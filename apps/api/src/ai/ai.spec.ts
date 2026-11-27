@@ -2,6 +2,7 @@ import { assertAllowedProviderUrl, isPrivate } from './url-guard';
 import { buildTurns, orderCandidates, SYSTEM_PROMPT } from './chat.service';
 import { cost, type ProviderRow } from './ai-router.service';
 import { errorFromStatus } from './provider-error';
+import { redactKeys } from './adapters';
 
 describe('AI provider URL guard (SSRF)', () => {
   const strict = { kind: 'openai', allowPrivate: false };
@@ -80,5 +81,13 @@ describe('router helpers', () => {
     expect(errorFromStatus(429, '')).toMatchObject({ code: 'RATE_LIMIT', failover: true, retryable: true });
     expect(errorFromStatus(503, '')).toMatchObject({ code: 'UPSTREAM', retryable: true });
     expect(errorFromStatus(400, '')).toMatchObject({ code: 'BAD_REQUEST', failover: false });
+  });
+});
+
+describe('provider error messages', () => {
+  it('never pass on key fragments', () => {
+    const out = redactKeys('Incorrect API key provided: sk-proj-abc123********************xyz9. Key AIzaSyA1234567890abcdef');
+    expect(out).toBe('Incorrect API key provided: sk-***. Key AIza***');
+    expect(redactKeys('You exceeded your current quota')).toBe('You exceeded your current quota');
   });
 });

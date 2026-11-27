@@ -103,6 +103,14 @@ describe('Sprint 3 (e2e): AI Provider Gateway, router, failover, chat', () => {
         .send({ name: 'x', kind: 'openai_compatible', defaultModel: 'm', secretRef })
         .expect(400);
       expect(noUrl.body.error.code).toBe('AI_BASE_URL_REQUIRED');
+      // A key pasted into the model box is refused, so it is never stored in plain text.
+      const keyAsModel = await http
+        .post('/api/v1/ai/providers')
+        .set(as(token))
+        .send({ name: 'x', kind: 'openai', defaultModel: 'sk-proj-abcdefghijklmnop', secretRef })
+        .expect(400);
+      expect(keyAsModel.body.error.code).toBe('VALIDATION_FAILED');
+      expect(JSON.stringify(keyAsModel.body)).not.toContain('abcdefghijklmnop');
     });
 
     it('creates providers in failover order and never returns the key', async () => {
