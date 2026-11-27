@@ -167,6 +167,7 @@ export default function TasksPage() {
                       <span className={STATUS_COLOR[t.status] ?? ''}>{TASK_STATUS_LABEL[t.status]}</span>
                       {t.progress && t.status !== 'completed' ? ` · ${t.progress}` : ''} · {agentName(t.agentId)} · ngân sách ${t.budgetUsd} · đã
                       dùng ${t.costUsd.toFixed(4)} · {new Date(t.updatedAt).toLocaleString('vi-VN')}
+                      {t.skillVersion ? ` · từ Skill v${t.skillVersion}` : ''}
                     </div>
                   </button>
                   <div className="flex flex-wrap gap-1">

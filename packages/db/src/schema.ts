@@ -293,6 +293,10 @@ export const aiTasks = ai.table('tasks', {
   planId: uuid('plan_id'),
   stepIndex: integer('step_index'),
   requiredLevel: text('required_level').$type<AiAccessLevel>().notNull().default('prepare'),
+  skillId: uuid('skill_id'),
+  skillVersion: text('skill_version'),
+  skillPrompt: text('skill_prompt'),
+  timeoutSec: integer('timeout_sec'),
   status: text('status').$type<AiTaskStatus>().notNull().default('pending'),
   progress: text('progress'),
   approvedBy: uuid('approved_by'),
@@ -442,4 +446,44 @@ export const aiPlans = ai.table('plans', {
   acceptedAt: ts('accepted_at'),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export interface AiSkillField {
+  name: string;
+  label: string;
+  type: 'text' | 'long_text' | 'number' | 'choice';
+  required: boolean;
+  options?: string[];
+  maxLength?: number;
+}
+export interface AiSkillManifestData {
+  inputs: AiSkillField[];
+  output: { format: 'markdown' };
+  permissions: string[];
+  dependencies: string[];
+  compatibility: { maris: string };
+  examples: { inputs: Record<string, string | number> }[];
+}
+
+export const aiSkills = ai.table('skills', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  key: text('key').notNull(),
+  name: text('name').notNull(),
+  version: text('version').notNull(),
+  description: text('description').notNull(),
+  author: text('author').notNull(),
+  source: text('source').$type<'template' | 'created' | 'imported'>().notNull(),
+  manifest: jsonb('manifest').$type<AiSkillManifestData>().notNull(),
+  instructions: text('instructions').notNull(),
+  successCriteria: text('success_criteria').notNull(),
+  requiredLevel: text('required_level').$type<AiAccessLevel>().notNull().default('prepare'),
+  budgetUsd: numeric('budget_usd', { precision: 12, scale: 4 }).notNull(),
+  timeoutSec: integer('timeout_sec').notNull().default(120),
+  checksum: text('checksum').notNull(),
+  status: text('status').$type<'active' | 'paused'>().notNull().default('active'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
 });
