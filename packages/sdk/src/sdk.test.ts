@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PLUGIN_SAMPLES } from '@maris/contracts';
+import {
+  CONNECTOR_TEMPLATES,
+  PLUGIN_SAMPLES,
+  SKILL_TEMPLATES,
+  WORKFLOW_TEMPLATES,
+} from '@maris/contracts';
 import {
   assertChecksum,
   checkPlugin,
@@ -50,4 +55,24 @@ test('check refuses a plugin that does not ask for the permissions it needs', ()
   const r = checkPlugin(definePlugin(sample));
   assert.equal(r.compatible, true);
   assert.deepEqual(r.parts, { skills: 1, connectors: 0, workflows: 1 });
+});
+
+test('sample plugins do not reuse the keys of built-in templates', () => {
+  const taken = new Set([
+    ...SKILL_TEMPLATES.map((t) => `skill:${t.key}`),
+    ...WORKFLOW_TEMPLATES.map((t) => `workflow:${t.key}`),
+    ...CONNECTOR_TEMPLATES.map((t) => `connector:${t.key}`),
+  ]);
+  for (const s of PLUGIN_SAMPLES) {
+    const m = definePlugin(s.manifest);
+    const keys = [
+      ...m.contents.skills.map((x) => `skill:${x.key}`),
+      ...m.contents.workflows.map((x) => `workflow:${x.key}`),
+      ...m.contents.connectors.map((x) => `connector:${x.key}`),
+    ];
+    assert.deepEqual(
+      keys.filter((k) => taken.has(k)),
+      [],
+    );
+  }
 });

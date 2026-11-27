@@ -394,7 +394,7 @@ export const PLUGIN_SAMPLES: readonly PluginSample[] = [
         skills: [
           {
             format: 'maris.skill/v1',
-            key: 'tra-loi-danh-gia',
+            key: 'plugin-tra-loi-danh-gia',
             version: '1.0.0',
             author: 'MARIS mẫu',
             name: 'Trả lời đánh giá',
@@ -417,7 +417,7 @@ export const PLUGIN_SAMPLES: readonly PluginSample[] = [
         workflows: [
           {
             format: 'maris.workflow/v1',
-            key: 'xu-ly-danh-gia',
+            key: 'plugin-xu-ly-danh-gia',
             name: 'Xử lý đánh giá mới',
             description: 'Soạn câu trả lời cho đánh giá, rồi chờ bạn duyệt.',
             version: 1,
@@ -443,7 +443,7 @@ export const PLUGIN_SAMPLES: readonly PluginSample[] = [
                   id: 'soan',
                   type: 'skill',
                   label: 'Soạn câu trả lời',
-                  skillKey: 'tra-loi-danh-gia',
+                  skillKey: 'plugin-tra-loi-danh-gia',
                   inputs: {
                     khach_hang: '{{input.khach_hang}}',
                     danh_gia: '{{input.danh_gia}}',
@@ -467,13 +467,13 @@ export const PLUGIN_SAMPLES: readonly PluginSample[] = [
         {
           kind: 'skill',
           name: 'Skill nhận đủ ô nhập',
-          key: 'tra-loi-danh-gia',
+          key: 'plugin-tra-loi-danh-gia',
           inputs: { khach_hang: 'Chị Lan', danh_gia: 'Giao hàng chậm', so_sao: 3 },
         },
         {
           kind: 'workflow',
           name: 'Workflow chạy hết các bước',
-          key: 'xu-ly-danh-gia',
+          key: 'plugin-xu-ly-danh-gia',
           inputs: { khach_hang: 'Anh Minh', danh_gia: 'Sản phẩm tốt', so_sao: 5 },
         },
       ],
