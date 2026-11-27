@@ -1,13 +1,13 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 11)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow, Connector, Plugin (Sprint 12, nghiệm thu)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
 | 2. Core Platform | Sprint 1, 2 và màn hình quản trị đã merge; còn vài mục nhỏ (bên dưới) |
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
-| 4. Skills, Workflow, Connector, Plugin | Sprint 9 (Skill) và Sprint 10 (Workflow Studio) đã merge; Sprint 11 (Connector Hub) đang review. Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
+| 4. Skills, Workflow, Connector, Plugin | Sprint 9–11 đã merge; Sprint 12 (Trung tâm Plugin, Extension SDK) đang review. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -104,7 +104,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Chỉ `ai.manage` tạo, sửa, nhập, xóa Skill; ai có `ai.chat` xem, xuất và chạy được
 - Giới hạn: chưa có phụ thuộc giữa các Skill, chưa có chữ ký số của tác giả (chỉ checksum), chưa có kho Skill chung; AI Tổng điều hành chưa tự chọn Skill
 
-## Sprint 10 – Workflow Studio (Giai đoạn 4)
+## Sprint 10 – Workflow Studio (Giai đoạn 4, đã merge)
 
 - Migration `0010`: `work.workflow_definitions`, `work.workflow_versions` (không sửa được sau khi ghi), `work.workflow_runs`, `work.workflow_run_steps` (RLS theo tenant); cột `workflow_run_id`, `workflow_node_id` cho `ai.tasks`
 - Các loại bước: Bắt đầu (ô nhập), AI, Skill, Điều kiện (7 phép so sánh, rẽ nhánh, quay lại để lặp), Duyệt, Chờ (tối đa 1 ngày), Điểm lưu, Kết thúc. Bước dùng `{{input.x}}` và `{{steps.y}}`; dữ liệu đưa cho AI được bọc trong `<workflow_data>`
@@ -115,7 +115,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - Giới hạn số lượt chạy bước mỗi lần (mặc định 50, tối đa 200) chặn vòng lặp; ngân sách lần chạy chặn chi phí
 - Giới hạn: thiết kế bằng danh sách bước (chưa kéo thả trên sơ đồ); chưa có bước Hẹn giờ, Dữ liệu, Song song, Gộp, Worker, Thông báo, Xử lý lỗi (cần sandbox); chưa chia sẻ giữa các workspace ngoài xuất/nhập tệp. Bước Connector và Webhook có từ Sprint 11
 
-## Sprint 11 – Connector Hub (Giai đoạn 4)
+## Sprint 11 – Connector Hub (Giai đoạn 4, đã merge)
 
 - Migration `0011`: schema `integration` với `connectors`, `connector_calls`, `webhook_events` (RLS theo tenant)
 - Connector gọi API (REST; GraphQL qua POST): địa chỉ gốc, cách đăng nhập (Bearer, header riêng, tham số, khóa trong đường dẫn) lấy khóa từ Secret Vault theo **tên**, header cố định, thời gian tối đa (1–60 giây)
@@ -128,3 +128,17 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **4 – Skills, Workflow,
 - 4 Connector mẫu: Telegram Bot, GitHub, n8n, Nhận đánh giá từ bên ngoài. Xuất/nhập tệp `maris.connector/v1` (không chứa khóa, kiểm tra checksum)
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
+
+## Sprint 12 – Trung tâm Plugin và Extension SDK (Giai đoạn 4)
+
+- Migration `0012`: schema `ext` với `plugins`, `plugin_versions`, `plugin_components`, `trusted_publishers` (RLS theo tenant)
+- Plugin (định dạng `maris.plugin/v1`) là một gói Skill, Connector và Workflow với một bản khai đủ các mục đặc tả Phần 23: mã, tên, phiên bản, mô tả, tác giả, quyền, phụ thuộc (khoảng phiên bản `*`, `1.2.3`, `>=1.2.3`, `^1.2.3`), tương thích MARIS, ngân sách tối đa mỗi lần chạy, thời gian tối đa, checksum, chữ ký Ed25519 và bộ bài kiểm tra. Ô nhập và kết quả là của từng thành phần
+- Quyền của Plugin: `ai.generate_text`, `connector.read`, `connector.write`, `webhook.receive`, `workflow.run`. Plugin phải xin đúng và đủ quyền các thành phần cần; không có quyền chạy mã hay đọc cơ sở dữ liệu
+- Cài (`ai.manage`): kiểm tra định dạng, checksum, chữ ký, giới hạn ngân sách và thời gian, chạy bài kiểm tra (không tốn tiền, không gọi ra ngoài), không đè lên Skill/Connector/Workflow không thuộc Plugin. Mọi thành phần vào ở trạng thái tắt
+- Kích hoạt (`ai.approve`): kiểm tra lại toàn vẹn, chữ ký theo danh sách khóa tin cậy hiện tại, tương thích, phụ thuộc (đã cài, đúng phiên bản, đang bật), thành phần còn đủ, Secret Vault đủ khóa cho Connector, bài kiểm tra. Plugin chưa có chữ ký tin cậy chỉ bật được khi người duyệt đánh dấu chấp nhận (ghi audit)
+- Tạm dừng, Thu hồi (tắt hẳn, chỉ còn gỡ được), Gỡ (xóa cả thành phần; bị chặn khi Plugin khác phụ thuộc), Cập nhật (cài đè bản mới, thành phần bị bỏ trong bản mới bị xóa), Quay về phiên bản cũ, Xuất tệp
+- Nhà phát hành tin cậy: thêm khóa công khai Ed25519 (hiện vân tay để so), thôi tin cậy thì các Plugin đang bật do khóa đó ký bị tạm dừng
+- Extension SDK `packages/sdk` (`@maris/sdk`): `definePlugin`, `signPlugin`, `verifyPluginSignature`, `checkPlugin`, `generatePublisherKeys` và lệnh `pnpm ext keygen|pack|sign|verify|check`. Hướng dẫn ở `docs/EXTENSION_SDK.md`
+- Trang `/plugins` (mục M34): Plugin mẫu “Chăm sóc đánh giá khách hàng”, cài từ tệp, chi tiết quyền, thành phần, kết quả kiểm tra, phiên bản; quản lý nhà phát hành tin cậy
+- Giới hạn: Plugin chưa chứa được Agent hay mã chạy (chờ sandbox Giai đoạn 5); chưa có kho Plugin chung và tự cập nhật; bài kiểm tra chỉ chạy thử, không gọi dịch vụ thật
+

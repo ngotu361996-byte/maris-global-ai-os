@@ -162,7 +162,12 @@ export class ConnectorsService {
 
   /** Turning a connector on approves its calls; it needs ai.approve and every secret it uses. */
   activate(ctx: Ctx, id: string): Promise<ConnectorResponse> {
-    return this.db.withContext(ctx, async (tx) => {
+    return this.db.withContext(ctx, async (tx) => this.respond(tx, await this.activateIn(tx, ctx, id)));
+  }
+
+  /** Activation inside a caller's transaction; plugin activation turns its connectors on with it. */
+  async activateIn(tx: Tx, ctx: Ctx, id: string): Promise<ConnectorRow> {
+    {
       const current = await this.row(tx, ctx.tenantId, id);
       const missing = missingSecrets(current, await this.secretNames(tx, ctx.tenantId));
       if (missing.length) {
@@ -192,33 +197,41 @@ export class ConnectorsService {
         key: row!.key,
         checksum: row!.checksum,
       });
-      return this.respond(tx, row!);
-    });
+      return row!;
+    }
   }
 
   pause(ctx: Ctx, id: string): Promise<ConnectorResponse> {
-    return this.db.withContext(ctx, async (tx) => {
+    return this.db.withContext(ctx, async (tx) => this.respond(tx, await this.pauseIn(tx, ctx, id)));
+  }
+
+  async pauseIn(tx: Tx, ctx: Ctx, id: string): Promise<ConnectorRow> {
+    {
       const current = await this.row(tx, ctx.tenantId, id);
-      if (current.status !== 'active') return this.respond(tx, current);
+      if (current.status !== 'active') return current;
       const [row] = await tx
         .update(connectors)
         .set({ status: 'paused', updatedAt: new Date() })
         .where(eq(connectors.id, id))
         .returning();
       await this.log(tx, ctx, 'connector.paused', id, { key: row!.key });
-      return this.respond(tx, row!);
-    });
+      return row!;
+    }
   }
 
   remove(ctx: Ctx, id: string): Promise<void> {
-    return this.db.withContext(ctx, async (tx) => {
+    return this.db.withContext(ctx, (tx) => this.removeIn(tx, ctx, id));
+  }
+
+  async removeIn(tx: Tx, ctx: Ctx, id: string): Promise<void> {
+    {
       const current = await this.row(tx, ctx.tenantId, id);
       await tx
         .update(connectors)
         .set({ deletedAt: new Date(), status: 'paused', webhookTokenHash: null })
         .where(eq(connectors.id, id));
       await this.log(tx, ctx, 'connector.deleted', id, { key: current.key });
-    });
+    }
   }
 
   /** A new webhook token, shown once. The old one stops working at once. */
@@ -258,7 +271,14 @@ export class ConnectorsService {
 
   /** Imports arrive as drafts: someone reads them and activates them before they call anything. */
   import(ctx: Ctx, body: ImportConnector): Promise<ConnectorResponse> {
-    const parsed = connectorManifestSchema.safeParse(body.manifest);
+    return this.db.withContext(ctx, async (tx) =>
+      this.respond(tx, await this.importIn(tx, ctx, body.manifest, body.replace ?? false)),
+    );
+  }
+
+  /** The import inside a caller's transaction; plugins install their connectors with it. */
+  async importIn(tx: Tx, ctx: Ctx, manifest: unknown, replace: boolean): Promise<ConnectorRow> {
+    const parsed = connectorManifestSchema.safeParse(manifest);
     if (!parsed.success) {
       throw new BadRequestException({
         code: 'CONNECTOR_INVALID',
@@ -272,7 +292,7 @@ export class ConnectorsService {
         message: 'Tệp đã bị sửa sau khi xuất (checksum không khớp)',
       });
     }
-    return this.db.withContext(ctx, async (tx) => {
+    {
       const [existing] = await tx
         .select()
         .from(connectors)
@@ -283,7 +303,7 @@ export class ConnectorsService {
             isNull(connectors.deletedAt),
           ),
         );
-      if (existing && !body.replace) {
+      if (existing && !replace) {
         throw new ConflictException({
           code: 'CONNECTOR_EXISTS',
           message: `Đã có Connector mã "${m.key}". Chọn thay thế nếu muốn ghi đè.`,
@@ -297,8 +317,13 @@ export class ConnectorsService {
       }
       const row = await this.insert(tx, ctx, { ...m, source: 'imported' });
       await this.log(tx, ctx, 'connector.imported', row.id, { key: row.key, replaced: !!existing });
-      return this.respond(tx, row);
-    });
+      return row;
+    }
+  }
+
+  /** Secret names a connector uses that are not in the Secret Vault. */
+  async missingSecretsOf(tx: Tx, row: ConnectorRow): Promise<string[]> {
+    return missingSecrets(row, await this.secretNames(tx, row.tenantId));
   }
 
   /**

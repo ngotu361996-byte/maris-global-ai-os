@@ -285,7 +285,20 @@ export class WorkflowsService {
    * agent it names exists here. An imported workflow arrives paused so someone reads it first.
    */
   import(ctx: Ctx, body: ImportWorkflow): Promise<WorkflowResponse> {
-    const parsed = workflowManifestSchema.safeParse(body.manifest);
+    return this.db.withContext(ctx, async (tx) => {
+      const { row, version } = await this.importIn(tx, ctx, body.manifest, body.replace ?? false);
+      return response(row, version);
+    });
+  }
+
+  /** The import inside a caller's transaction; plugins install their workflows with it. */
+  async importIn(
+    tx: Tx,
+    ctx: Ctx,
+    manifest: unknown,
+    replace: boolean,
+  ): Promise<{ row: WorkflowRow; version: VersionRow }> {
+    const parsed = workflowManifestSchema.safeParse(manifest);
     if (!parsed.success) {
       const issue = parsed.error.issues[0]!;
       throw new BadRequestException({
@@ -301,7 +314,7 @@ export class WorkflowsService {
         message: 'Tệp Workflow đã bị sửa sau khi xuất (checksum không khớp)',
       });
     }
-    return this.db.withContext(ctx, async (tx) => {
+    {
       await this.assertReferences(tx, ctx.tenantId, m.graph);
       const [existing] = await tx
         .select()
@@ -316,7 +329,7 @@ export class WorkflowsService {
       let row: WorkflowRow;
       let version: VersionRow;
       if (existing) {
-        if (!body.replace)
+        if (!replace)
           throw new ConflictException({
             code: 'WORKFLOW_EXISTS',
             message: `Đã có Workflow mã "${m.key}"`,
@@ -360,8 +373,30 @@ export class WorkflowsService {
         verified: !!m.checksum,
         replaced: !!existing,
       });
-      return response(row, version);
+      return { row, version };
+    }
+  }
+
+  /** Turns a workflow on or off inside a caller's transaction (plugin activation and pause). */
+  async setStatusIn(tx: Tx, ctx: Ctx, id: string, status: 'active' | 'paused'): Promise<void> {
+    const current = await this.row(tx, ctx.tenantId, id);
+    if (current.status === status) return;
+    await tx
+      .update(workflowDefinitions)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(workflowDefinitions.id, id));
+    await this.log(tx, ctx, status === 'active' ? 'workflow.activated' : 'workflow.paused', id, {
+      key: current.key,
     });
+  }
+
+  async removeIn(tx: Tx, ctx: Ctx, id: string): Promise<void> {
+    const row = await this.row(tx, ctx.tenantId, id);
+    await tx
+      .update(workflowDefinitions)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(workflowDefinitions.id, id));
+    await this.log(tx, ctx, 'workflow.deleted', id, { key: row.key });
   }
 
   async row(tx: Tx, tenantId: string, id: string): Promise<WorkflowRow> {

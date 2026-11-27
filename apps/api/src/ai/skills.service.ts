@@ -193,7 +193,14 @@ export class SkillsService {
    * only), no dependencies, and the checksum when the file has one. The skill arrives paused.
    */
   import(ctx: Ctx, body: ImportSkill): Promise<SkillResponse> {
-    const parsed = skillManifestSchema.safeParse(body.manifest);
+    return this.db.withContext(ctx, async (tx) =>
+      skillResponse(await this.importIn(tx, ctx, body.manifest, body.replace ?? false)),
+    );
+  }
+
+  /** The import inside a caller's transaction; plugins install their skills with it. */
+  async importIn(tx: Tx, ctx: Ctx, manifest: unknown, replace: boolean): Promise<SkillRow> {
+    const parsed = skillManifestSchema.safeParse(manifest);
     if (!parsed.success) {
       const issue = parsed.error.issues[0]!;
       throw new BadRequestException({
@@ -237,7 +244,7 @@ export class SkillsService {
         message: 'Tệp Skill đã bị sửa sau khi xuất (checksum không khớp)',
       });
     }
-    return this.db.withContext(ctx, async (tx) => {
+    {
       const [existing] = await tx
         .select()
         .from(aiSkills)
@@ -250,7 +257,7 @@ export class SkillsService {
         );
       let row: SkillRow;
       if (existing) {
-        if (!body.replace)
+        if (!replace)
           throw new ConflictException({
             code: 'SKILL_EXISTS',
             message: `Đã có Skill mã "${m.key}" (phiên bản ${existing.version})`,
@@ -269,8 +276,30 @@ export class SkillsService {
         verified: !!m.checksum,
         replaced: !!existing,
       });
-      return skillResponse(row);
+      return row;
+    }
+  }
+
+  /** Turns a skill on or off inside a caller's transaction (plugin activation and pause). */
+  async setStatusIn(tx: Tx, ctx: Ctx, id: string, status: 'active' | 'paused'): Promise<void> {
+    const current = await this.get(tx, ctx.tenantId, id);
+    if (current.status === status) return;
+    await tx
+      .update(aiSkills)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(aiSkills.id, id));
+    await this.log(tx, ctx, `ai.skill.${status === 'active' ? 'activated' : 'paused'}`, id, {
+      key: current.key,
     });
+  }
+
+  async removeIn(tx: Tx, ctx: Ctx, id: string): Promise<void> {
+    const row = await this.get(tx, ctx.tenantId, id);
+    await tx
+      .update(aiSkills)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(aiSkills.id, id));
+    await this.log(tx, ctx, 'ai.skill.deleted', id, { key: row.key, version: row.version });
   }
 
   /** Checks the inputs against the skill's fields and creates a pending task. */

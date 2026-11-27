@@ -14,5 +14,6 @@ import { WorkflowsService } from './workflows.service';
   imports: [AiModule, ConnectorsModule],
   controllers: [WorkflowsController, WebhookIntakeController],
   providers: [WorkflowsService, WorkflowRunsService, WebhookIntakeService],
+  exports: [WorkflowsService],
 })
 export class WorkflowsModule {}
