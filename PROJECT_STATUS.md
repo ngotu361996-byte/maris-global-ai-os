@@ -5,7 +5,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **2 – Core Platform (Sp
 | Giai đoạn | Trạng thái |
 | --- | --- |
 | 0–1. Audit và Architecture | Xong (báo cáo đã duyệt Q1–Q6) |
-| 2. Core Platform | Sprint 1 đã merge; Sprint 2 đang review |
+| 2. Core Platform | Sprint 1, 2 đã merge; màn hình quản trị đang review |
 | 3–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -24,9 +24,14 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **2 – Core Platform (Sp
 - Rate limit trên Redis (toàn API, đăng nhập, chấp nhận lời mời, MFA)
 - Phiên trình duyệt bằng cookie httpOnly + header chống CSRF; web không còn giữ token
 
+## Màn hình quản trị (web)
+
+- `/secrets`: thêm, xem danh sách, xóa key; giá trị không bao giờ hiển thị lại
+- `/members`: mời (đường dẫn `/invite#token`, token nằm sau `#` nên không đi vào log máy chủ), đổi vai trò, gỡ, hủy lời mời
+- `/invite`: người được mời đặt tên và mật khẩu, hoặc đăng nhập nếu đã có tài khoản
+
 ## Còn lại của Giai đoạn 2
 
-- Giao diện quản lý thành viên, lời mời và Secret Vault trên web
 - Gửi email lời mời (hiện Owner tự chia sẻ đường dẫn/token)
 - next-intl (vi, en); audit cho sự kiện cấp người dùng (đăng nhập, bật MFA)
 - Xoay vòng khóa `VAULT_MASTER_KEY` (cột `key_version` đã có)

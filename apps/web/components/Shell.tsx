@@ -1,11 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import type { MeResponse } from '@maris/contracts';
-import { DASHBOARD_METRICS, NAV_GROUPS } from '@/lib/navigation';
+import { api, session } from '@/lib/api';
+import { NAV_GROUPS } from '@/lib/navigation';
 
 /** Bố cục 5 vùng: sidebar trái, topbar, khu giữa, sidebar phải (AI Chat), drawer dưới. */
-export function Shell({ me, onLogout }: { me: MeResponse; onLogout: () => void }) {
+export function Shell({ me, children }: { me: MeResponse; children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const onLogout = async () => {
+    await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
+    session.clear();
+    router.replace('/login');
+  };
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [chatOpen, setChatOpen] = useState(true);
   const tenant = me.memberships[0];
@@ -50,37 +60,29 @@ export function Shell({ me, onLogout }: { me: MeResponse; onLogout: () => void }
         {NAV_GROUPS.map((g) => (
           <div key={g.title} className="mb-4">
             <div className="mb-1 text-xs uppercase tracking-wider text-muted">{g.title}</div>
-            {g.items.map((i) => (
-              <div key={i.code} className="flex justify-between rounded px-2 py-1 text-muted">
-                <span>{i.name}</span>
-                <span className="whitespace-nowrap text-[10px]">Chưa có</span>
-              </div>
-            ))}
+            {g.items.map((i) =>
+              i.href ? (
+                <Link
+                  key={i.code}
+                  href={i.href}
+                  className={`block rounded px-2 py-1 ${pathname === i.href ? 'bg-bg text-accent' : 'text-ink hover:bg-bg'}`}
+                >
+                  {i.name}
+                </Link>
+              ) : (
+                <div key={i.code} className="flex justify-between rounded px-2 py-1 text-muted">
+                  <span>{i.name}</span>
+                  <span className="whitespace-nowrap text-[10px]">Chưa có</span>
+                </div>
+              ),
+            )}
           </div>
         ))}
       </nav>
 
       {/* Khu giữa + sidebar phải */}
       <div className="flex min-h-0 overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-6">
-          <h1 className="mb-1 text-xl font-semibold">Xin chào, {me.displayName}</h1>
-          <p className="mb-6 text-sm text-muted">
-            Bảng điều khiển chính. Ô chưa có nguồn dữ liệu hiển thị “Chưa kết nối”; hệ thống không bao giờ điền số mẫu.
-          </p>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-            {DASHBOARD_METRICS.map((m) => (
-              <div key={m} className="rounded-lg border border-line bg-panel p-3">
-                <div className="text-xs text-muted">{m}</div>
-                <div className="mt-2 text-sm font-medium text-muted">Chưa kết nối</div>
-              </div>
-            ))}
-          </div>
-          {!me.mfaEnabled && (
-            <p className="mt-6 rounded-md border border-accent p-3 text-sm">
-              Bạn chưa bật xác thực 2 lớp (MFA). Nên bật trước khi kết nối tài khoản kinh doanh.
-            </p>
-          )}
-        </main>
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
         {chatOpen && (
           <aside className="w-80 border-l border-line bg-panel p-4 text-sm max-lg:hidden" aria-label="AI Chat">
             <div className="mb-2 flex items-center justify-between">
