@@ -20,3 +20,4 @@ export * from './plugins';
 export * from './devices';
 export * from './worker-jobs';
 export * from './monitor';
+export * from './content';

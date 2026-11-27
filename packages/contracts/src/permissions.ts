@@ -19,6 +19,9 @@ export const PERMISSIONS = [
   'infra.read',
   'infra.manage',
   'infra.code',
+  'content.read',
+  'content.manage',
+  'content.approve',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -27,6 +30,14 @@ export type PermissionKey = (typeof PERMISSIONS)[number];
 export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
   owner: PERMISSIONS,
   administrator: PERMISSIONS,
-  manager: ['tenant.read', 'members.read', 'roles.read', 'ai.chat', 'ai.memory'],
-  member: ['tenant.read', 'ai.chat'],
+  manager: [
+    'tenant.read',
+    'members.read',
+    'roles.read',
+    'ai.chat',
+    'ai.memory',
+    'content.read',
+    'content.manage',
+  ],
+  member: ['tenant.read', 'ai.chat', 'content.read'],
 };

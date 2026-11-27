@@ -110,7 +110,15 @@ Giám sát (`devices/system-monitor.service.ts`, Sprint 15): chỉ đọc, khôn
 PostgreSQL, Redis, hàng đợi BullMQ) đọc qua kết nối chung; phần của tenant (hoạt động, outbox, việc Worker, thiết bị, lỗi gần
 đây) đọc trong `withContext` nên RLS áp dụng. `buildChecks()` là hàm thuần biến số liệu thành các mục kiểm tra.
 
-## Dữ liệu
+## Kho nội dung (Giai đoạn 6)
+
+`apps/api/src/content` (Sprint 16, đặc tả Phần 11). Tệp gốc và tệp của phiên bản thành phẩm nằm ở
+`FILE_STORAGE_DIR/content/<tenant>/<uuid>`, ghi bằng `LocalFileStorage.putStream`: truyền thẳng xuống tệp tạm, băm
+SHA-256, giữ 64 KB đầu để nhận dạng loại, rồi mới đổi tên khi bản ghi đã vào database. Kiểm tra trùng dùng
+`pg_advisory_xact_lock` theo tenant và SHA-256. `content.assets_keep_original` (trigger) chặn mọi thay đổi bản gốc;
+`content.item_versions` chỉ được INSERT. Duyệt kiểm tra quyền sử dụng của mọi nguồn trong phiên bản hiện tại.
+
+
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.

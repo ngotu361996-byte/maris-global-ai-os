@@ -828,3 +828,119 @@ export const workerJobLogs = infra.table('worker_job_logs', {
   message: text('message').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------- content (Phase 6, Part 11)
+
+export const content = pgSchema('content');
+
+export const contentFolders = content.table('folders', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  library: text('library').$type<'source' | 'output'>().notNull(),
+  name: text('name').notNull(),
+  parentId: uuid('parent_id'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  deletedAt: ts('deleted_at'),
+});
+
+export interface ProductFactsData {
+  name: string;
+  sku?: string;
+  price?: number;
+  currency?: string;
+  url?: string;
+  specs: { key: string; value: string }[];
+}
+
+export const contentAssets = content.table('assets', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  folderId: uuid('folder_id'),
+  title: text('title').notNull(),
+  kind: text('kind')
+    .$type<'video' | 'image' | 'audio' | 'document' | 'text' | 'product' | 'reference'>()
+    .notNull(),
+  description: text('description'),
+  body: text('body'),
+  product: jsonb('product').$type<ProductFactsData | null>(),
+  fileName: text('file_name'),
+  mime: text('mime'),
+  sizeBytes: bigint('size_bytes', { mode: 'number' }),
+  storageKey: text('storage_key'),
+  contentSha256: text('content_sha256').notNull(),
+  source: text('source').$type<'upload' | 'manual' | 'connector' | 'url'>().notNull(),
+  sourceRef: text('source_ref'),
+  rightsStatus: text('rights_status')
+    .$type<'owned' | 'licensed' | 'permission' | 'unknown' | 'restricted'>()
+    .notNull()
+    .default('unknown'),
+  rightsHolder: text('rights_holder'),
+  rightsNote: text('rights_note'),
+  rightsExpiresAt: ts('rights_expires_at'),
+  verifiedBy: uuid('verified_by'),
+  verifiedAt: ts('verified_at'),
+  tags: text('tags').array().notNull().default([]),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  archivedAt: ts('archived_at'),
+});
+
+export const contentItems = content.table('items', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  folderId: uuid('folder_id'),
+  title: text('title').notNull(),
+  kind: text('kind').$type<'video' | 'image' | 'text' | 'ad' | 'audio' | 'other'>().notNull(),
+  language: text('language').notNull(),
+  market: text('market'),
+  platform: text('platform').$type<
+    | 'facebook'
+    | 'instagram'
+    | 'tiktok'
+    | 'youtube'
+    | 'google'
+    | 'website'
+    | 'shopify'
+    | 'email'
+    | 'other'
+  >(),
+  status: text('status')
+    .$type<'draft' | 'in_review' | 'approved' | 'rejected' | 'published' | 'archived'>()
+    .notNull()
+    .default('draft'),
+  currentVersion: integer('current_version').notNull().default(0),
+  tags: text('tags').array().notNull().default([]),
+  reviewNote: text('review_note'),
+  submittedBy: uuid('submitted_by'),
+  submittedAt: ts('submitted_at'),
+  reviewedBy: uuid('reviewed_by'),
+  reviewedAt: ts('reviewed_at'),
+  publishedUrl: text('published_url'),
+  publishedAt: ts('published_at'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const contentItemVersions = content.table('item_versions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  version: integer('version').notNull(),
+  body: text('body'),
+  fileName: text('file_name'),
+  mime: text('mime'),
+  sizeBytes: bigint('size_bytes', { mode: 'number' }),
+  sha256: text('sha256'),
+  storageKey: text('storage_key'),
+  sourceAssetIds: uuid('source_asset_ids').array().notNull().default([]),
+  skillId: uuid('skill_id'),
+  skillVersion: text('skill_version'),
+  workflowRunId: uuid('workflow_run_id'),
+  aiTaskId: uuid('ai_task_id'),
+  note: text('note'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});

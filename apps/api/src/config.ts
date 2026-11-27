@@ -36,6 +36,8 @@ const envSchema = z.object({
   // Uploaded files. Local disk for now; keep this folder in your backups.
   FILE_STORAGE_DIR: z.string().min(1).default('./data/uploads'),
   FILE_MAX_MB: z.coerce.number().int().min(1).max(500).default(25),
+  // Files in the content library (videos are large). Streamed to disk, never held in memory.
+  CONTENT_MAX_MB: z.coerce.number().int().min(1).max(20_000).default(2048),
   NODE_ENV: z.string().default('development'),
 });
 
