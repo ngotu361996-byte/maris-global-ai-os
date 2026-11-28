@@ -391,6 +391,8 @@ export interface VersionResponse {
   aiWarnings: string[];
   /** The Media Worker job that made this version's file. */
   workerJobId: string | null;
+  /** Size and length read from the file (images and videos), when they could be read. */
+  media: { width: number | null; height: number | null; durationSec: number | null } | null;
   note: string | null;
   createdByName: string;
   createdAt: string;
@@ -414,6 +416,8 @@ export interface ItemResponse {
   publishedAt: string | null;
   /** The item this one was made from in another language, market or platform. */
   variantOf: string | null;
+  /** Result of the automatic quality checks on the current version (null: no version yet). */
+  qaStatus: QaStatus | null;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
@@ -423,6 +427,8 @@ export interface ItemDetailResponse extends ItemResponse {
   versions: VersionResponse[];
   /** Why the item cannot be approved now, e.g. a source without usable rights. */
   approvalBlockers: string[];
+  /** The automatic quality checks of the current version. */
+  qa: QaReport | null;
   /** AI writing runs for this item, newest first. */
   generations: GenerationResponse[];
   /** Items made from this one in other languages, markets or platforms. */
@@ -654,3 +660,110 @@ export interface VoiceoverResponse {
   chars: number;
   costUsd: number;
 }
+
+// ---------------------------------------------------------------------------- quality checks
+
+/**
+ * Automatic quality checks (spec Part 12: tự động kiểm tra chất lượng; M30 bảo vệ chính sách nền
+ * tảng). They run on the current version before it is sent for review and again before approval.
+ * An error blocks both; a warning is shown to the reviewer; info only explains what could not be
+ * checked.
+ */
+export const QA_LEVELS = ['error', 'warning', 'info'] as const;
+export type QaLevel = (typeof QA_LEVELS)[number];
+export interface QaCheck {
+  code: string;
+  level: QaLevel;
+  message: string;
+}
+export type QaStatus = 'pass' | 'warning' | 'fail';
+export interface QaReport {
+  status: QaStatus;
+  version: number;
+  checks: QaCheck[];
+}
+export const QA_STATUS_LABEL: Record<QaStatus, string> = {
+  pass: 'Đạt',
+  warning: 'Cần xem lại',
+  fail: 'Chưa đạt',
+};
+
+/** Limits per platform used by the checks. Null means no limit is checked. */
+export const PLATFORM_LIMITS: Record<
+  Platform,
+  {
+    /** Longest text, in characters. */
+    textMaxChars: number | null;
+    /** Most hashtags allowed (error above), and the number above which reach usually drops. */
+    hashtagsMax: number | null;
+    hashtagsAdvised: number | null;
+    /** Longest video, in seconds. */
+    videoMaxSec: number | null;
+    /** Width ÷ height the platform shows best, with the accepted range for images and videos. */
+    ratio: { best: number; label: string; min: number; max: number } | null;
+  }
+> = {
+  facebook: {
+    textMaxChars: 63_206,
+    hashtagsMax: null,
+    hashtagsAdvised: 5,
+    videoMaxSec: 240 * 60,
+    ratio: null,
+  },
+  instagram: {
+    textMaxChars: 2_200,
+    hashtagsMax: 30,
+    hashtagsAdvised: 10,
+    videoMaxSec: 15 * 60,
+    ratio: { best: 4 / 5, label: '4:5 hoặc 1:1 (Reels 9:16)', min: 9 / 16, max: 1.91 },
+  },
+  tiktok: {
+    textMaxChars: 4_000,
+    hashtagsMax: null,
+    hashtagsAdvised: 6,
+    videoMaxSec: 10 * 60,
+    ratio: { best: 9 / 16, label: '9:16', min: 9 / 16, max: 9 / 16 },
+  },
+  youtube: {
+    textMaxChars: 5_000,
+    hashtagsMax: 15,
+    hashtagsAdvised: 5,
+    videoMaxSec: 12 * 3600,
+    ratio: { best: 16 / 9, label: '16:9 (Shorts 9:16)', min: 9 / 16, max: 16 / 9 },
+  },
+  google: {
+    textMaxChars: null,
+    hashtagsMax: null,
+    hashtagsAdvised: null,
+    videoMaxSec: null,
+    ratio: null,
+  },
+  website: {
+    textMaxChars: null,
+    hashtagsMax: null,
+    hashtagsAdvised: null,
+    videoMaxSec: null,
+    ratio: null,
+  },
+  shopify: {
+    textMaxChars: null,
+    hashtagsMax: null,
+    hashtagsAdvised: null,
+    videoMaxSec: null,
+    ratio: null,
+  },
+  email: {
+    textMaxChars: null,
+    hashtagsMax: null,
+    hashtagsAdvised: null,
+    videoMaxSec: null,
+    ratio: null,
+  },
+  other: {
+    textMaxChars: null,
+    hashtagsMax: null,
+    hashtagsAdvised: null,
+    videoMaxSec: null,
+    ratio: null,
+  },
+};

@@ -25,6 +25,7 @@ import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
 import { AiWriter } from './AiWriter';
+import { QaBadge, QaPanel } from './QaPanel';
 import { VoiceOver } from './VoiceOver';
 
 const STATUS_CLS: Record<ItemStatus, string> = {
@@ -95,7 +96,12 @@ function Version({ itemId, v, current }: { itemId: string; v: VersionResponse; c
       {v.file && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
           <span>
-            {v.file.name} ({Math.round(v.file.sizeBytes / 1024)} KB)
+            {v.file.name} ({Math.round(v.file.sizeBytes / 1024)} KB
+            {v.media?.width && v.media.height ? `, ${v.media.width}×${v.media.height}` : ''}
+            {v.media?.durationSec != null
+              ? `, ${v.media.durationSec.toLocaleString('vi-VN')} giây`
+              : ''}
+            )
           </span>
           {media && !url && (
             <button className={btnGhostCls} onClick={show}>
@@ -431,6 +437,7 @@ function ItemsPage() {
                 <tr>
                   <th className="py-1">Thành phẩm</th>
                   <th>Trạng thái</th>
+                  <th>Kiểm định</th>
                   <th>Nền tảng</th>
                   <th>Phiên bản</th>
                   <th>Cập nhật</th>
@@ -453,6 +460,13 @@ function ItemsPage() {
                     <td className="py-2 pr-3">
                       <Status s={i.status} />
                     </td>
+                    <td className="py-2 pr-3">
+                      {i.qaStatus ? (
+                        <QaBadge s={i.qaStatus} />
+                      ) : (
+                        <span className="text-muted">–</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3">{i.platform ? PLATFORM_LABEL[i.platform] : '–'}</td>
                     <td className="py-2 pr-3 tabular-nums">{i.currentVersion || '–'}</td>
                     <td className="whitespace-nowrap py-2 text-muted">
@@ -472,7 +486,12 @@ function ItemsPage() {
             <Status s={detail.status} />
             {(detail.status === 'draft' || detail.status === 'rejected') && (
               <button
-                disabled={busy}
+                disabled={busy || detail.qa?.status === 'fail'}
+                title={
+                  detail.qa?.status === 'fail'
+                    ? 'Sửa các lỗi kiểm định trước khi gửi duyệt'
+                    : undefined
+                }
                 className={btnGhostCls}
                 onClick={() => act('submit', undefined, 'Đã gửi duyệt.')}
               >
@@ -539,6 +558,7 @@ function ItemsPage() {
           {detail.approvalBlockers.length > 0 && detail.status !== 'draft' && (
             <Notice kind="error">Chưa duyệt được: {detail.approvalBlockers.join('; ')}.</Notice>
           )}
+          {detail.qa && <QaPanel qa={detail.qa} />}
           {detail.variantOf && (
             <p className="mb-3 text-sm">
               <span className="text-muted">Chuyển thể từ: </span>

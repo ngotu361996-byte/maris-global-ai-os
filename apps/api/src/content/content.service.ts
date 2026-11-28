@@ -47,6 +47,7 @@ import {
   type ItemDetailResponse,
   type ItemResponse,
   type ItemStatus,
+  type QaReport,
   type Publish,
   type Review,
   type RightsStatus,
@@ -64,6 +65,8 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { DbService, type Tx } from '../db/db.service';
 import { FileTooLargeError, LocalFileStorage, type StagedFile } from '../files/file-storage';
 import { cleanFileName, detectType, type DetectedType } from '../files/file-type';
+import { mediaInfo, type MediaInfo } from '../files/media-info';
+import { qaReport } from './content-qa';
 
 const {
   contentFolders,
@@ -116,6 +119,8 @@ export interface StoredFile {
   sha256: string;
   storageKey: string;
   staged: StagedFile;
+  /** Image or video size and length read from the file's first bytes, when they could be read. */
+  media: MediaInfo | null;
 }
 
 /**
@@ -478,17 +483,27 @@ export class ContentService {
         where.push(
           sql`EXISTS (SELECT 1 FROM content.item_versions v WHERE v.item_id = ${contentItems.id} AND v.source_asset_ids @> ARRAY[${q.sourceAssetId}]::uuid[])`,
         );
-      const rows = await tx
-        .select()
+      const joined = await tx
+        .select({ item: contentItems, version: contentItemVersions })
         .from(contentItems)
+        .leftJoin(
+          contentItemVersions,
+          and(
+            eq(contentItemVersions.itemId, contentItems.id),
+            eq(contentItemVersions.version, contentItems.currentVersion),
+          ),
+        )
         .where(and(...where))
         .orderBy(desc(contentItems.updatedAt))
         .limit(q.limit);
       const names = await this.names(
         tx,
-        rows.flatMap((r) => [r.createdBy, r.reviewedBy]),
+        joined.flatMap(({ item: r }) => [r.createdBy, r.reviewedBy]),
       );
-      return rows.map((r) => itemResponse(r, names));
+      return joined.map(({ item, version }) => ({
+        ...itemResponse(item, names),
+        qaStatus: qaOf(item, version ?? undefined)?.status ?? null,
+      }));
     });
   }
 
@@ -678,18 +693,30 @@ export class ContentService {
     };
   }
 
+  /** Sends the current version for review once it passes the automatic quality checks. */
   submit(ctx: Ctx, id: string): Promise<ItemDetailResponse> {
-    return this.transition(
-      ctx,
-      id,
-      ['draft', 'rejected'],
-      'in_review',
-      'content.item.submitted',
-      (item) => {
-        if (item.currentVersion < 1) throw badState('Chưa có phiên bản nào để duyệt');
-        return { submittedBy: ctx.userId, submittedAt: new Date(), reviewNote: null };
-      },
-    );
+    return this.db.withContext(ctx, async (tx) => {
+      const item = await this.item(tx, ctx, id, true);
+      if (item.status !== 'draft' && item.status !== 'rejected')
+        throw badState(`Không thể chuyển từ “${item.status}” sang “in_review”`);
+      if (item.currentVersion < 1) throw badState('Chưa có phiên bản nào để duyệt');
+      const qa = qaOf(item, await this.currentVersionRow(tx, item));
+      const errors = qa?.checks.filter((c) => c.level === 'error') ?? [];
+      if (errors.length > 0)
+        throw new ConflictException({
+          code: 'CONTENT_QA_FAILED',
+          message: `Chưa đạt kiểm định: ${errors.map((c) => c.message).join('; ')}`,
+        });
+      return this.applyTransition(
+        tx,
+        ctx,
+        item,
+        'in_review',
+        'content.item.submitted',
+        { submittedBy: ctx.userId, submittedAt: new Date(), reviewNote: null },
+        { version: item.currentVersion, qa: qaSummary(qa) },
+      );
+    });
   }
 
   approve(ctx: Ctx, id: string, raw: Review): Promise<ItemDetailResponse> {
@@ -698,6 +725,7 @@ export class ContentService {
       const item = await this.item(tx, ctx, id, true);
       if (item.status !== 'in_review') throw badState('Chỉ duyệt được nội dung đang chờ duyệt');
       const blockers = await this.blockers(tx, ctx, item);
+      const qa = qaOf(item, await this.currentVersionRow(tx, item));
       if (blockers.length > 0)
         throw new ConflictException({
           code: 'CONTENT_RIGHTS_BLOCKED',
@@ -714,7 +742,7 @@ export class ContentService {
           reviewedAt: new Date(),
           reviewNote: note,
         },
-        { version: item.currentVersion },
+        { version: item.currentVersion, qa: qaSummary(qa) },
       );
     });
   }
@@ -878,6 +906,9 @@ export class ContentService {
       workflowRunId: lineage.workflowRunId,
       aiTaskId: lineage.aiTaskId,
       workerJobId: lineage.workerJobId ?? null,
+      mediaWidth: f?.media?.width ?? null,
+      mediaHeight: f?.media?.height ?? null,
+      durationMs: f?.media?.durationMs ?? null,
       note: lineage.note,
       createdBy: ctx.userId,
     });
@@ -942,7 +973,15 @@ export class ContentService {
         415,
       );
     }
-    return { name, type, size: staged.size, sha256: staged.sha256, storageKey, staged };
+    return {
+      name,
+      type,
+      size: staged.size,
+      sha256: staged.sha256,
+      storageKey,
+      staged,
+      media: mediaInfo(staged.head, type.mime),
+    };
   }
 
   /** One check at a time per content hash, so two equal uploads cannot both get in. */
@@ -968,6 +1007,20 @@ export class ContentService {
       });
   }
 
+  private async currentVersionRow(tx: Tx, item: ItemRow): Promise<VersionRow | undefined> {
+    if (item.currentVersion < 1) return undefined;
+    const [v] = await tx
+      .select()
+      .from(contentItemVersions)
+      .where(
+        and(
+          eq(contentItemVersions.itemId, item.id),
+          eq(contentItemVersions.version, item.currentVersion),
+        ),
+      );
+    return v;
+  }
+
   private async blockers(tx: Tx, ctx: Ctx, item: ItemRow): Promise<string[]> {
     const [v] = await tx
       .select()
@@ -979,7 +1032,9 @@ export class ContentService {
         ),
       );
     if (!v) return ['chưa có phiên bản'];
-    const out: string[] = [];
+    const out: string[] = (qaOf(item, v)?.checks ?? [])
+      .filter((c) => c.level === 'error')
+      .map((c) => `kiểm định: ${c.message.charAt(0).toLowerCase()}${c.message.slice(1)}`);
     if (v.aiTaskId) {
       const [g] = await tx
         .select({ warnings: contentGenerations.warnings })
@@ -1079,6 +1134,10 @@ export class ContentService {
         item.status === 'archived' || item.status === 'published'
           ? []
           : await this.blockers(tx, ctx, item),
+      qa: qaOf(
+        item,
+        versions.find((v) => v.version === item.currentVersion),
+      ),
     };
   }
 
@@ -1234,6 +1293,7 @@ function itemResponse(r: ItemRow, names: Map<string, string>): ItemResponse {
     publishedUrl: r.publishedUrl,
     publishedAt: r.publishedAt?.toISOString() ?? null,
     variantOf: r.variantOf,
+    qaStatus: null,
     createdByName: names.get(r.createdBy) ?? '',
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -1301,8 +1361,36 @@ function versionResponse(
     aiTaskId: v.aiTaskId,
     aiWarnings,
     workerJobId: v.workerJobId,
+    media:
+      v.mediaWidth || v.durationMs !== null
+        ? {
+            width: v.mediaWidth,
+            height: v.mediaHeight,
+            durationSec: v.durationMs === null ? null : v.durationMs / 1000,
+          }
+        : null,
     note: v.note,
     createdByName: names.get(v.createdBy) ?? '',
     createdAt: v.createdAt.toISOString(),
   };
 }
+
+/** The quality checks of an item's current version, or null when it has none. */
+function qaOf(item: ItemRow, v: VersionRow | undefined): QaReport | null {
+  if (!v) return null;
+  return qaReport({
+    kind: item.kind,
+    platform: item.platform,
+    language: item.language,
+    version: v.version,
+    body: v.storageKey ? null : (v.body ?? ''),
+    mime: v.storageKey ? v.mime : null,
+    width: v.mediaWidth,
+    height: v.mediaHeight,
+    durationMs: v.durationMs,
+  });
+}
+
+/** What the audit log keeps of a quality check: the result and the codes found. */
+const qaSummary = (qa: QaReport | null) =>
+  qa ? { status: qa.status, codes: [...new Set(qa.checks.map((c) => c.code))] } : null;
