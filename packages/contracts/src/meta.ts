@@ -239,3 +239,97 @@ export interface ApiCallResponse {
   calledByName: string | null;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------- Publishing (Sprint 22)
+
+export const META_POST_FORMATS = ['feed', 'photo', 'video', 'reel', 'ig_image', 'ig_reel'] as const;
+export type MetaPostFormat = (typeof META_POST_FORMATS)[number];
+
+export const META_POST_FORMAT_LABEL: Record<MetaPostFormat, string> = {
+  feed: 'Bài viết trên Page',
+  photo: 'Ảnh trên Page',
+  video: 'Video trên Page',
+  reel: 'Reels trên Page',
+  ig_image: 'Ảnh Instagram',
+  ig_reel: 'Reels Instagram',
+};
+
+export const META_POST_STATUSES = [
+  'scheduled',
+  'publishing',
+  'processing',
+  'published',
+  'failed',
+  'cancelled',
+] as const;
+export type MetaPostStatus = (typeof META_POST_STATUSES)[number];
+
+export const META_POST_STATUS_LABEL: Record<MetaPostStatus, string> = {
+  scheduled: 'Đã lên lịch',
+  publishing: 'Đang đăng',
+  processing: 'Meta đang xử lý',
+  published: 'Đã đăng',
+  failed: 'Lỗi, chờ xử lý',
+  cancelled: 'Đã hủy',
+};
+
+/** Suggested publishing times in the market's time zone (3 slots a day, Part 15). */
+export const META_POST_SLOTS = ['09:00', '12:00', '20:00'] as const;
+
+/** Reels length that Meta accepts, in seconds. */
+export const META_REEL_SECONDS = {
+  page: { min: 3, max: 90 },
+  instagram: { min: 3, max: 900 },
+} as const;
+export const META_MEDIA_MAX_MB = { photo: 10, video: 1024 } as const;
+
+export const scheduleMetaPostSchema = z.object({
+  itemId: z.uuid(),
+  assetIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(META_LIMITS.pages * 2),
+  /** For a video on a Page: a normal video or Reels. */
+  videoAs: z.enum(['video', 'reel']).default('reel'),
+  /** For photos and videos; a text item is posted as its own words. */
+  caption: z.string().trim().max(63206).nullable().default(null),
+  link: z
+    .url({ protocol: /^https?$/ })
+    .max(2000)
+    .nullable()
+    .default(null),
+  /** When to post; null means now. */
+  at: z.iso.datetime({ offset: true }).nullable().default(null),
+});
+export type ScheduleMetaPost = z.infer<typeof scheduleMetaPostSchema>;
+
+export const listMetaPostsSchema = z.object({
+  status: z.enum(META_POST_STATUSES).optional(),
+  itemId: z.uuid().optional(),
+});
+export type ListMetaPosts = z.infer<typeof listMetaPostsSchema>;
+
+export interface MetaPostResponse {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  version: number;
+  assetId: string;
+  assetName: string;
+  assetKind: MetaAssetKind;
+  format: MetaPostFormat;
+  caption: string | null;
+  link: string | null;
+  scheduledAt: string;
+  localDay: string;
+  status: MetaPostStatus;
+  attempts: number;
+  nextAttemptAt: string | null;
+  externalId: string | null;
+  permalink: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdByName: string;
+  createdAt: string;
+  publishedAt: string | null;
+}

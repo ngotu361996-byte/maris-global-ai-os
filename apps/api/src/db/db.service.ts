@@ -41,7 +41,10 @@ export class DbService implements OnModuleDestroy {
    * System job context: sets app.system so policies that allow a named system job
    * (for example the outbox relay) apply. Never use for user requests.
    */
-  async withSystem<T>(job: 'outbox_relay', fn: (tx: Tx) => Promise<T>): Promise<T> {
+  async withSystem<T>(
+    job: 'outbox_relay' | 'meta_publisher',
+    fn: (tx: Tx) => Promise<T>,
+  ): Promise<T> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`SELECT set_config('app.system', ${job}, true)`);
       return fn(tx);

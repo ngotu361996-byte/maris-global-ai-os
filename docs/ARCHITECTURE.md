@@ -162,6 +162,14 @@ header hạn mức được lưu (`meta:usage:<tenant>`, coi là cũ sau 1 giờ
 loại theo mã Graph. Token đi trong header `Authorization`, kèm `appsecret_proof`. `META_GRAPH_URL` và `META_DIALOG_URL`
 chỉ đổi khi kiểm thử.
 
+Xuất bản (Sprint 22): `MetaPublishService` xếp bài vào `meta.posts` trong transaction có khóa tư vấn theo tenant (giữ hạn mức
+ngày), rồi một vòng lặp 30 giây trong tiến trình API nhận bài đến giờ bằng `withSystem('meta_publisher')` và
+`FOR UPDATE SKIP LOCKED`, sau đó chạy từng bài dưới ngữ cảnh tenant của người đã xếp lịch. Mỗi bước gửi Meta lưu kết quả vào
+cột `stage`, nên lần chạy lại tiếp từ bước dở. Lệnh ghi không bao giờ thử lại mù: lỗi mạng giữa lúc ghi, hoặc bài còn ở
+`publishing` khi khóa hết hạn, chuyển sang `failed` với mã `META_POST_UNKNOWN` để người kiểm tra. Tệp đi bằng multipart
+(`graph`, `graph-video`) hoặc gửi nguyên tệp lên `rupload` (`META_GRAPH_VIDEO_URL`, `META_UPLOAD_URL`).
+`META_PUBLISHER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
+
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.

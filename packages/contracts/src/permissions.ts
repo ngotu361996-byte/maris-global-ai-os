@@ -25,6 +25,7 @@ export const PERMISSIONS = [
   'content.generate',
   'meta.read',
   'meta.manage',
+  'meta.publish',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -43,6 +44,7 @@ export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
     'content.manage',
     'content.generate',
     'meta.read',
+    'meta.publish',
   ],
   member: ['tenant.read', 'ai.chat', 'content.read'],
 };

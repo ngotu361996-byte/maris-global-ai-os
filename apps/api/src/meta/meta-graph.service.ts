@@ -1,5 +1,6 @@
 import { HttpException, Inject, Injectable } from '@nestjs/common';
 import { createHash, createHmac } from 'node:crypto';
+import { openAsBlob } from 'node:fs';
 import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { schema, uuidv7 } from '@maris/db';
 import {
@@ -61,6 +62,13 @@ export interface GraphRequest {
   /** Keep a GET answer this long and give it to every caller that asks again (Part 15 cache). */
   cacheSec?: number;
   assetId?: string;
+  /** Which Meta host: the Graph API, its video upload host, or the resumable upload host. */
+  host?: 'graph' | 'video' | 'upload';
+  /** Files sent as multipart fields, streamed from disk. */
+  files?: Record<string, { path: string; name: string; type: string }>;
+  /** A file sent whole as the body to the upload host. The path may hold {v} for the version. */
+  upload?: { path: string; size: number };
+  timeoutMs?: number;
 }
 
 export interface GraphCtx {
@@ -305,30 +313,48 @@ export class MetaGraphService {
     }
   }
 
-  private fetch(
+  private async fetch(
     req: GraphRequest,
     creds: Creds,
     params: Record<string, string | number | boolean>,
   ): Promise<Response> {
-    const url = new URL(
-      `${this.config.META_GRAPH_URL.replace(/\/$/, '')}/${creds.version}${req.path}`,
-    );
-    const form = new URLSearchParams(
-      Object.entries(params).map(([k, v]): [string, string] => [k, String(v)]),
-    );
+    const host = req.host ?? 'graph';
+    const strip = (u: string) => u.replace(/\/$/, '');
+    const url =
+      host === 'upload'
+        ? new URL(`${strip(this.config.META_UPLOAD_URL)}${req.path.replace('{v}', creds.version)}`)
+        : new URL(
+            `${strip(host === 'video' ? this.config.META_GRAPH_VIDEO_URL : this.config.META_GRAPH_URL)}/${creds.version}${req.path}`,
+          );
+    const pairs = Object.entries(params).map(([k, v]): [string, string] => [k, String(v)]);
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (creds.token) headers.Authorization = `Bearer ${creds.token}`;
-    let body: string | undefined;
-    if (req.method === 'POST') {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      body = form.toString();
-    } else url.search = form.toString();
+    let body: string | FormData | Blob | undefined;
+    if (req.upload) {
+      // Meta's resumable upload host: the whole file in one request from offset 0.
+      if (creds.token) headers.Authorization = `OAuth ${creds.token}`;
+      headers.offset = '0';
+      headers.file_size = String(req.upload.size);
+      headers['Content-Type'] = 'application/octet-stream';
+      body = await openAsBlob(req.upload.path);
+    } else {
+      if (creds.token) headers.Authorization = `Bearer ${creds.token}`;
+      if (req.files) {
+        const form = new FormData();
+        for (const [k, v] of pairs) form.append(k, v);
+        for (const [field, f] of Object.entries(req.files))
+          form.append(field, await openAsBlob(f.path, { type: f.type }), f.name);
+        body = form;
+      } else if (req.method === 'POST') {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        body = new URLSearchParams(pairs).toString();
+      } else url.search = new URLSearchParams(pairs).toString();
+    }
     return fetch(url, {
       method: req.method,
       headers,
       body,
       redirect: 'manual',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(req.timeoutMs ?? TIMEOUT_MS),
     });
   }
 
