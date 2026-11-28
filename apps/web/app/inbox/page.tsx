@@ -6,6 +6,7 @@ import {
   META_CHANNEL_LABEL,
   META_CHANNELS,
   META_REPLY_MAX_CHARS,
+  type ContactDetail,
   type InboxSummaryResponse,
   type InboxThreadDetail,
   type InboxThreadResponse,
@@ -61,7 +62,7 @@ export default function InboxPage() {
   const [detail, setDetail] = useState<InboxThreadDetail | null>(null);
   const [text, setText] = useState('');
   const [fromAi, setFromAi] = useState(false);
-  const [busy, setBusy] = useState<'' | 'send' | 'ai' | 'sync' | 'hook' | 'update'>('');
+  const [busy, setBusy] = useState<'' | 'send' | 'ai' | 'sync' | 'hook' | 'update' | 'crm'>('');
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [showSetup, setShowSetup] = useState(false);
@@ -82,6 +83,14 @@ export default function InboxPage() {
 
   const loadDetail = useCallback((id: string) => {
     api<InboxThreadDetail>(`/meta/inbox/threads/${id}`).then(setDetail).catch(fail);
+  }, []);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('thread');
+    if (id) {
+      setStatus('');
+      setSelected(id);
+    }
   }, []);
 
   useEffect(() => {
@@ -172,6 +181,23 @@ export default function InboxPage() {
     }
   }
 
+  async function saveToCrm() {
+    if (!detail) return;
+    const c = await run(
+      'crm',
+      () =>
+        api<ContactDetail>(`/crm/threads/${detail.id}/contact`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        }),
+      'Đã lưu khách vào CRM.',
+    );
+    if (c) {
+      loadDetail(detail.id);
+      loadList();
+    }
+  }
+
   if (!me) return <div className="p-8 text-sm text-muted">Đang tải…</div>;
   const win = detail ? windowLeft(detail.replyUntil) : null;
   const webhookOn =
@@ -227,7 +253,7 @@ export default function InboxPage() {
             </dd>
           </dl>
           <p className="mb-2 text-xs text-muted">
-            Trong Meta App: Webhook → Page, nhập URL và mã trên, chọn feed và messages; Webhook →
+            Trong Meta App: Webhook → Page, nhập URL và mã trên, chọn feed, messages và leadgen; Webhook →
             Instagram, chọn comments và messages. Sau đó bấm “Bật webhook cho các Page”.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -356,9 +382,30 @@ export default function InboxPage() {
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <Channel c={detail.channel} /> {detail.assetName}
                     {detail.assignedToName && <> · giao cho {detail.assignedToName}</>}
+                    {detail.contactId && (
+                      <>
+                        {' '}
+                        · khách hàng CRM:{' '}
+                        <Link
+                          href={`/crm?contact=${detail.contactId}`}
+                          className="text-accent underline"
+                        >
+                          {detail.contactName}
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {!detail.contactId && (
+                    <button
+                      disabled={busy !== ''}
+                      className={btnGhostCls}
+                      onClick={() => void saveToCrm()}
+                    >
+                      {busy === 'crm' ? 'Đang lưu…' : 'Lưu vào CRM'}
+                    </button>
+                  )}
                   {detail.assignedTo !== me.id ? (
                     <button
                       disabled={busy !== ''}

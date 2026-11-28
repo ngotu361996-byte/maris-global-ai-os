@@ -22,3 +22,4 @@ export * from './worker-jobs';
 export * from './monitor';
 export * from './content';
 export * from './meta';
+export * from './crm';

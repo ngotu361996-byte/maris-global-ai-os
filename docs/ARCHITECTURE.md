@@ -178,7 +178,17 @@ liệt kê kết nối đang hoạt động, rồi đọc dưới ngữ cảnh t
 tư vấn (giữ 400/ngày), gọi Meta, rồi ghi `sent`, `failed` hoặc `unknown`. Gợi ý AI gọi `AiRouterService` trực tiếp, đồng bộ,
 qua Cost Governor và Dừng khẩn cấp, ghi `ai.provider_calls.meta_thread_id`.
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `maris_ctx` (hàm ngữ cảnh).
+CRM và Lead Ads (Sprint 24): schema `crm` (`contacts`, `activities` chỉ INSERT) và `meta.lead_forms`, `meta.leads`.
+`MetaLeadsService` (module Meta) nhận lead theo hai đường: webhook `leadgen` (chỉ có mã lead; `MetaInboxService.receive`
+chuyển cho `fromWebhook`, đọc câu trả lời bằng `GET /{leadgen_id}`, nhóm `lookup`) và vòng đọc dự phòng
+(`withSystem('meta_leads')`, mỗi phút một Page, `leadgen_forms` rồi `/{form}/leads` lọc `time_created` mới hơn lần trước,
+theo trang tối đa 10 × 50, nhóm `sync` ưu tiên nền; khi webhook đang chạy thì đọc thưa gấp 4). Lead ghi một lần theo mã Meta,
+rồi `contacts-core.ts` ghép với khách hàng cùng số điện thoại (chuẩn hóa `+84` → `0`) hoặc email, giữ bằng khóa tư vấn theo
+tenant và chỉ mục duy nhất từng phần (bỏ qua khách đã lưu trữ). `CrmService` (module CRM, import module Meta) cho danh sách,
+sửa, giai đoạn, phụ trách, ghi chú và gắn hội thoại `meta.threads.contact_id`. Audit chỉ ghi mã và tên trường, không ghi tên,
+số điện thoại hay email của khách.
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

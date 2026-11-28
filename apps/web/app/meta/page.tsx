@@ -238,8 +238,9 @@ export default function MetaPage() {
             </li>
             <li>
               Ở mục Trường hợp sử dụng (Use cases), thêm “Quản lý mọi thứ trên Trang của bạn” và
-              “Quản lý tin nhắn và nội dung trên Instagram”; bấm Tùy chỉnh để thêm đủ quyền. Thiếu
-              bước này Facebook sẽ báo “Invalid Scopes”.
+              “Quản lý tin nhắn và nội dung trên Instagram”; bấm Tùy chỉnh để thêm đủ quyền. Muốn
+              nhận lead quảng cáo, thêm cả “Thu thập và quản lý khách hàng tiềm năng” (Capture &amp;
+              manage ad leads). Thiếu bước này Facebook sẽ báo “Invalid Scopes”.
             </li>
             <li>
               Ở Cài đặt ứng dụng → Nâng cao → Bảo mật, đặt “Ứng dụng gốc hoặc ứng dụng máy tính?” là

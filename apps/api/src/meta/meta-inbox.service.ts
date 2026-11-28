@@ -42,7 +42,9 @@ import {
   fromPageFeed,
   parseWebhook,
   type Inbound,
+  type LeadRef,
 } from './inbox-events';
+import { MetaLeadsService } from './meta-leads.service';
 import { MetaError, MetaGraphService, type GraphCtx } from './meta-graph.service';
 import { localDay } from './meta-publish.service';
 
@@ -56,6 +58,7 @@ const {
   aiProviderCalls,
   tenantMembers,
   users,
+  crmContacts,
 } = schema;
 type ThreadRow = typeof metaThreads.$inferSelect;
 type AssetRow = typeof metaAssets.$inferSelect;
@@ -105,6 +108,7 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly router: AiRouterService,
     private readonly control: ControlService,
     private readonly governor: CostGovernorService,
+    private readonly leads: MetaLeadsService,
   ) {}
 
   onModuleInit(): void {
@@ -154,6 +158,7 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({ code: 'META_WEBHOOK_BODY', message: 'Thiếu nội dung' });
     const changes = parseWebhook(body);
     const fresh: Inbound[] = [];
+    const leads: LeadRef[] = [];
     const stored = await this.db.withContext({ tenantId }, async (tx) => {
       const [app] = await tx.select().from(metaApps).where(eq(metaApps.tenantId, tenantId));
       if (!app)
@@ -181,11 +186,12 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
             eventKey: c.key,
             object: c.object,
             field: c.field,
-            outcome: c.inbound ? 'stored' : 'ignored',
+            outcome: c.inbound || c.lead ? 'stored' : 'ignored',
             detail: c.skipped ?? '',
           })
           .onConflictDoNothing()
           .returning({ id: metaWebhookEvents.id });
+        if (first && c.lead) leads.push(c.lead);
         if (!first || !c.inbound) continue;
         const r = await this.ingest(tx, tenantId, c.inbound);
         if (r === 'new_thread') fresh.push(c.inbound);
@@ -198,7 +204,8 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
       return n;
     });
     await this.fillNames(tenantId, null, fresh);
-    return { received: changes.length, stored };
+    const leadsStored = leads.length ? await this.leads.fromWebhook(tenantId, leads) : 0;
+    return { received: changes.length, stored: stored + leadsStored };
   }
 
   /** Turns on the webhook for each enabled Page (Messenger, comments; Instagram through its Page). */
@@ -227,7 +234,7 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
         priority: 'normal',
         method: 'POST',
         path: `/${p.externalId}/subscribed_apps`,
-        params: { subscribed_fields: 'feed,messages,message_echoes' },
+        params: { subscribed_fields: 'feed,messages,message_echoes,leadgen' },
         auth: { kind: 'page', assetId: p.id },
         assetId: p.id,
       });
@@ -659,10 +666,16 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
     return this.db.withContext(ctx, async (tx) => {
       const assignee = schema.users;
       const rows = await tx
-        .select({ t: metaThreads, asset: metaAssets, assignee: assignee.displayName })
+        .select({
+          t: metaThreads,
+          asset: metaAssets,
+          assignee: assignee.displayName,
+          contact: crmContacts.name,
+        })
         .from(metaThreads)
         .innerJoin(metaAssets, eq(metaAssets.id, metaThreads.assetId))
         .leftJoin(assignee, eq(assignee.id, metaThreads.assignedTo))
+        .leftJoin(crmContacts, eq(crmContacts.id, metaThreads.contactId))
         .where(
           and(
             eq(metaThreads.tenantId, ctx.tenantId),
@@ -681,7 +694,7 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
         )
         .orderBy(desc(metaThreads.lastMessageAt), desc(metaThreads.id))
         .limit(200);
-      return rows.map((r) => threadResponse(r.t, r.asset, r.assignee));
+      return rows.map((r) => threadResponse(r.t, r.asset, r.assignee, r.contact));
     });
   }
 
@@ -1061,10 +1074,16 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
   private async detailIn(tx: Tx, tenantId: string, id: string): Promise<InboxThreadDetail> {
     const assignee = schema.users;
     const [r] = await tx
-      .select({ t: metaThreads, asset: metaAssets, assignee: assignee.displayName })
+      .select({
+        t: metaThreads,
+        asset: metaAssets,
+        assignee: assignee.displayName,
+        contact: crmContacts.name,
+      })
       .from(metaThreads)
       .innerJoin(metaAssets, eq(metaAssets.id, metaThreads.assetId))
       .leftJoin(assignee, eq(assignee.id, metaThreads.assignedTo))
+      .leftJoin(crmContacts, eq(crmContacts.id, metaThreads.contactId))
       .where(and(eq(metaThreads.id, id), eq(metaThreads.tenantId, tenantId)));
     if (!r)
       throw new NotFoundException({
@@ -1080,7 +1099,7 @@ export class MetaInboxService implements OnModuleInit, OnModuleDestroy {
       .limit(500);
     const t = r.t;
     return {
-      ...threadResponse(t, r.asset, r.assignee),
+      ...threadResponse(t, r.asset, r.assignee, r.contact),
       postId: t.postId,
       messages: msgs.map(({ m, by }) => messageResponse(m, by, t)),
       suggestion: t.aiAt
@@ -1110,7 +1129,12 @@ function replyUntil(t: ThreadRow): Date | null {
     : null;
 }
 
-function threadResponse(t: ThreadRow, a: AssetRow, assignee: string | null): InboxThreadResponse {
+function threadResponse(
+  t: ThreadRow,
+  a: AssetRow,
+  assignee: string | null,
+  contactName: string | null,
+): InboxThreadResponse {
   return {
     id: t.id,
     channel: t.channel,
@@ -1124,6 +1148,8 @@ function threadResponse(t: ThreadRow, a: AssetRow, assignee: string | null): Inb
     snippet: t.snippet,
     lastMessageAt: t.lastMessageAt.toISOString(),
     replyUntil: replyUntil(t)?.toISOString() ?? null,
+    contactId: t.contactId,
+    contactName: t.contactId ? contactName : null,
   };
 }
 

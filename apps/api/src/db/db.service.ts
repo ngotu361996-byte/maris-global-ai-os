@@ -42,7 +42,7 @@ export class DbService implements OnModuleDestroy {
    * (for example the outbox relay) apply. Never use for user requests.
    */
   async withSystem<T>(
-    job: 'outbox_relay' | 'meta_publisher' | 'meta_inbox',
+    job: 'outbox_relay' | 'meta_publisher' | 'meta_inbox' | 'meta_leads',
     fn: (tx: Tx) => Promise<T>,
   ): Promise<T> {
     return this.db.transaction(async (tx) => {

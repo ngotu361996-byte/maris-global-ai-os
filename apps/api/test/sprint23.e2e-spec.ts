@@ -700,6 +700,6 @@ describe('Sprint 23 (e2e): Facebook and Instagram inbox', () => {
       '/5551/subscribed_apps',
       '/5552/subscribed_apps',
     ]);
-    expect(subs[0]!.params['subscribed_fields']).toBe('feed,messages,message_echoes');
+    expect(subs[0]!.params['subscribed_fields']).toBe('feed,messages,message_echoes,leadgen');
   });
 });

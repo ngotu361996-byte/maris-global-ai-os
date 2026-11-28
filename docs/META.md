@@ -8,7 +8,7 @@ MARIS kết nối với Meta bằng đăng nhập chính thức (OAuth) qua mộ
 2. Chọn **Ứng dụng của tôi → Tạo ứng dụng**, chọn loại **Doanh nghiệp (Business)**, gắn với Business Portfolio của doanh nghiệp.
 3. Trong ứng dụng, thêm sản phẩm **Đăng nhập Facebook dành cho doanh nghiệp (Facebook Login for Business)**.
 4. Vào **Cài đặt** của sản phẩm đó và thêm vào **URI chuyển hướng OAuth hợp lệ** đúng địa chỉ mà Trung tâm Meta hiển thị. Khi chạy trên máy, địa chỉ là `http://localhost:3000/meta/callback`.
-5. Vào **Trường hợp sử dụng (Use cases)** và thêm **Quản lý mọi thứ trên Trang của bạn** và **Quản lý tin nhắn và nội dung trên Instagram**. Ở mỗi mục, bấm **Tùy chỉnh** và thêm các quyền: `pages_manage_posts`, `pages_manage_engagement`, `pages_read_user_content`, `read_insights`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_messages`. Thiếu bước này, khi kết nối Facebook sẽ báo **Invalid Scopes**.
+5. Vào **Trường hợp sử dụng (Use cases)** và thêm **Quản lý mọi thứ trên Trang của bạn** và **Quản lý tin nhắn và nội dung trên Instagram**. Ở mỗi mục, bấm **Tùy chỉnh** và thêm các quyền: `pages_manage_posts`, `pages_manage_engagement`, `pages_read_user_content`, `read_insights`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_messages`. Để nhận lead từ quảng cáo, thêm cả trường hợp **Thu thập và quản lý khách hàng tiềm năng (Capture & manage ad leads)** với quyền `leads_retrieval`, `pages_manage_ads`. Thiếu bước này, khi kết nối Facebook sẽ báo **Invalid Scopes**.
 6. Vào **Cài đặt ứng dụng → Nâng cao → Bảo mật**, đặt **Ứng dụng gốc hoặc ứng dụng máy tính? (Native or desktop app?)** là **Không**, rồi lưu. Nếu để Có, khi kết nối Facebook sẽ báo **the app is configured as a desktop app**.
 7. Vào **Cài đặt ứng dụng → Thông tin cơ bản**. Ghi lại **ID ứng dụng (App ID)**, rồi bấm **Hiển thị** ở **Khóa bí mật của ứng dụng (App Secret)**.
 
@@ -66,15 +66,32 @@ Meta báo tin mới qua **webhook**. Webhook chỉ dùng được khi MARIS có 
 
 1. Đặt `PUBLIC_API_URL` trong `.env` là địa chỉ công khai của API (ví dụ `https://api.cuahang.vn`), rồi khởi động lại API.
 2. Mở **Hộp thư khách hàng → Cách nhận tin**, sao chép **URL gọi lại** và **Mã xác minh**.
-3. Trong Meta App, thêm sản phẩm **Webhook**. Chọn **Page**, nhập URL và mã, đăng ký các trường `feed` và `messages`. Chọn **Instagram**, đăng ký `comments` và `messages`.
+3. Trong Meta App, thêm sản phẩm **Webhook**. Chọn **Page**, nhập URL và mã, đăng ký các trường `feed`, `messages` và `leadgen`. Chọn **Instagram**, đăng ký `comments` và `messages`.
 4. Quay lại MARIS, bấm **Bật webhook cho các Page**.
 
 MARIS kiểm tra chữ ký `X-Hub-Signature-256` của mỗi lần Meta gửi bằng App Secret, và mỗi sự kiện chỉ được ghi một lần.
 
-## 6. Hạn mức
+## 6. Khách hàng (CRM) và Lead Ads
+
+Trang **CRM và bán hàng** (`/crm`) gom mọi khách hàng: người gửi biểu mẫu quảng cáo (Lead Ads), người nhắn tin hay bình luận mà nhân viên bấm **Lưu vào CRM** trong Hộp thư, và khách nhập tay.
+
+- **Giai đoạn**: Mới → Đã liên hệ → Có nhu cầu → Đã mua, hoặc Không mua (ghi lý do). Bấm ô đếm phía trên để lọc.
+- **Người phụ trách, nhãn, giá trị dự kiến, ghi chú**. Mỗi thay đổi được ghi vào **Lịch sử chăm sóc**, không sửa hay xóa được.
+- **Không trùng**: một số điện thoại (viết `+84 912 345 678` hay `0912.345.678` đều là một) hoặc một email chỉ thuộc một khách hàng. Lead mới cùng số hoặc email được ghép vào khách đã có.
+
+Nhận lead từ quảng cáo:
+
+1. Thêm trường hợp sử dụng **Capture & manage ad leads** trong Meta App (mục 1), rồi ở **Trung tâm Meta** bấm **Kết nối lại** để Facebook cấp quyền `leads_retrieval` và `pages_manage_ads`. Tab **Lead Ads** báo khi còn thiếu quyền.
+2. Bấm **Đọc lead ngay** ở tab Lead Ads. MARIS lấy các biểu mẫu của Page đang bật và lead của chúng. Sau đó MARIS tự đọc lead mới mỗi 15 phút (`META_LEADS_POLL_MIN`, đặt 0 để tắt).
+3. Khi có địa chỉ công khai và đã bật webhook (mục 5, có trường `leadgen`), lead về ngay khi khách gửi biểu mẫu.
+4. Tắt ô **Nhận lead** của biểu mẫu nào không muốn đưa vào CRM.
+
+Tên, số điện thoại và email của khách chỉ hiện cho người có quyền xem CRM và không ghi vào nhật ký kiểm toán.
+
+## 7. Hạn mức
 
 Gói BUSINESS cho 1 tài khoản Facebook, tối đa 20 Page và 10 tài khoản quảng cáo, 400 lượt trả lời khách mỗi ngày, khoảng 3.000 lượt gọi API mỗi ngày, chia theo nhóm (đặc tả Phần 15). Đây là giới hạn nội bộ của MARIS, không phải hạn mức hay cam kết của Meta. Khi Meta báo giới hạn, MARIS dừng gọi đúng thời gian Meta yêu cầu.
 
-## 7. Ngắt kết nối
+## 8. Ngắt kết nối
 
 Bấm **Ngắt kết nối** ở Trung tâm Meta. MARIS báo Meta thu hồi quyền và xóa mọi token đã lưu. Có thể gỡ thêm ứng dụng trong **Cài đặt Facebook → Doanh nghiệp tích hợp**.

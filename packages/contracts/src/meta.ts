@@ -70,6 +70,7 @@ export const META_SCOPES = [
   'instagram_manage_comments',
   'instagram_manage_messages',
   'leads_retrieval',
+  'pages_manage_ads',
   'ads_read',
   'ads_management',
   'business_management',
@@ -98,7 +99,7 @@ export const META_FEATURES = [
     scopes: ['pages_messaging', 'instagram_manage_messages', 'pages_manage_metadata'],
   },
   { key: 'insights', label: 'Phân tích Page', scopes: ['read_insights'] },
-  { key: 'leads', label: 'Lead Ads', scopes: ['leads_retrieval'] },
+  { key: 'leads', label: 'Lead Ads', scopes: ['leads_retrieval', 'pages_manage_ads'] },
   { key: 'ads_read', label: 'Xem quảng cáo và chi tiêu', scopes: ['ads_read'] },
   { key: 'ads_manage', label: 'Quản lý quảng cáo', scopes: ['ads_management'] },
 ] as const;
@@ -391,6 +392,9 @@ export interface InboxThreadResponse {
   lastMessageAt: string;
   /** Messenger and Instagram: until when a reply is still allowed; null for comments. */
   replyUntil: string | null;
+  /** The CRM contact this conversation belongs to (Sprint 24). */
+  contactId: string | null;
+  contactName: string | null;
 }
 
 export interface InboxMessageResponse {

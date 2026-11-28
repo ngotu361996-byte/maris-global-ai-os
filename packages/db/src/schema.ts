@@ -1070,6 +1070,7 @@ export const metaAssets = meta.table('assets', {
   syncedAt: ts('synced_at').notNull().defaultNow(),
   removedAt: ts('removed_at'),
   inboxSyncedAt: ts('inbox_synced_at'),
+  leadsSyncedAt: ts('leads_synced_at'),
 });
 
 export const apiCalls = integration.table('api_calls', {
@@ -1142,6 +1143,7 @@ export const metaThreads = meta.table('threads', {
   aiHandoff: boolean('ai_handoff').notNull().default(false),
   aiReason: text('ai_reason'),
   aiAt: ts('ai_at'),
+  contactId: uuid('contact_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
@@ -1178,4 +1180,78 @@ export const metaWebhookEvents = meta.table('webhook_events', {
   outcome: text('outcome').$type<'stored' | 'ignored'>().notNull(),
   detail: text('detail').notNull().default(''),
   receivedAt: ts('received_at').notNull().defaultNow(),
+});
+
+export const metaLeadForms = meta.table('lead_forms', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  assetId: uuid('asset_id').notNull(),
+  externalId: text('external_id').notNull(),
+  name: text('name').notNull(),
+  status: text('status').notNull().default('ACTIVE'),
+  enabled: boolean('enabled').notNull().default(true),
+  lastLeadAt: ts('last_lead_at'),
+  syncedAt: ts('synced_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const metaLeads = meta.table('leads', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  formId: uuid('form_id').notNull(),
+  assetId: uuid('asset_id').notNull(),
+  externalId: text('external_id').notNull(),
+  fields: jsonb('fields').$type<{ name: string; values: string[] }[]>().notNull().default([]),
+  adId: text('ad_id'),
+  adName: text('ad_name'),
+  campaignId: text('campaign_id'),
+  campaignName: text('campaign_name'),
+  isOrganic: boolean('is_organic').notNull().default(false),
+  platform: text('platform'),
+  leadAt: ts('lead_at').notNull(),
+  receivedVia: text('received_via').$type<'webhook' | 'sync'>().notNull(),
+  contactId: uuid('contact_id'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------- CRM (Sprint 24)
+
+export const crm = pgSchema('crm');
+
+export type CrmStage = 'new' | 'contacted' | 'qualified' | 'won' | 'lost';
+export type CrmSource = 'manual' | 'lead_ads' | MetaChannel;
+
+export const crmContacts = crm.table('contacts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  phoneNorm: text('phone_norm'),
+  email: text('email'),
+  emailNorm: text('email_norm'),
+  stage: text('stage').$type<CrmStage>().notNull().default('new'),
+  source: text('source').$type<CrmSource>().notNull(),
+  ownerId: uuid('owner_id'),
+  tags: text('tags').array().notNull().default([]),
+  note: text('note').notNull().default(''),
+  valueVnd: bigint('value_vnd', { mode: 'number' }),
+  lostReason: text('lost_reason'),
+  lastActivityAt: ts('last_activity_at').notNull().defaultNow(),
+  createdBy: uuid('created_by'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  archivedAt: ts('archived_at'),
+});
+
+export const crmActivities = crm.table('activities', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  contactId: uuid('contact_id').notNull(),
+  kind: text('kind')
+    .$type<'created' | 'note' | 'stage' | 'owner' | 'lead' | 'thread' | 'updated' | 'archived'>()
+    .notNull(),
+  body: text('body').notNull().default(''),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+  actorId: uuid('actor_id'),
+  createdAt: ts('created_at').notNull().defaultNow(),
 });
