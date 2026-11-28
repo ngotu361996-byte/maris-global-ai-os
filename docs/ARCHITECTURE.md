@@ -148,7 +148,21 @@ trong `approvalBlockers` và chặn `submit`; audit ghi `qa: {status, codes}`.
 
 
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).
+## Trung tâm Meta và API Governor (Giai đoạn 7)
+
+`apps/api/src/meta` (Sprint 21, đặc tả Phần 14–15). `MetaService` giữ Meta App của tenant (`meta.apps`), kết nối Facebook
+(`meta.connections`, một kết nối chưa gỡ mỗi tenant) và tài sản (`meta.assets`). Token được niêm phong bằng
+`SecretVaultService.sealFor` với dữ liệu gắn kèm `<tenant>:<meta-user|meta-page>:<id dòng>`. Trạng thái OAuth nằm trong
+Redis (`meta:oauth:<sha256>`, 10 phút, lấy ra một lần bằng GETDEL).
+
+Mọi lượt gọi Graph API đi qua `MetaGraphService.call`: đọc thông tin xác thực trong một transaction ngắn, rồi kiểm tra lệnh
+dừng của Meta (`meta:block:<tenant>:<all|nhóm>`), ngắt mạch (`meta:cb:*`) và ngân sách 24 giờ đếm từ `integration.api_calls`
+theo luật thuần trong `governor.ts`. Lượt đọc có `cacheSec` dùng cache Redis và gộp lượt trùng trong tiến trình. Sau mỗi lượt,
+header hạn mức được lưu (`meta:usage:<tenant>`, coi là cũ sau 1 giờ), lượt gọi được ghi (chỉ đường dẫn), và lỗi được phân
+loại theo mã Graph. Token đi trong header `Authorization`, kèm `appsecret_proof`. `META_GRAPH_URL` và `META_DIALOG_URL`
+chỉ đổi khi kiểm thử.
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

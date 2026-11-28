@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 20, nghiệm thu)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 21)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -9,8 +9,9 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **6 – Content Factory (
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6. Content Factory | Sprint 16–19 đã merge; Sprint 20 (dây chuyền kiểm định) đang review. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7–14 | Chưa bắt đầu |
+| 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
+| 7. Meta Platform | Sprint 21 (kết nối Meta và API Governor) đang review; kế tiếp: 22 xuất bản, 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
+| 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
 
@@ -131,7 +132,18 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **6 – Content Factory (
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 20 – Dây chuyền kiểm định nội dung (Giai đoạn 6)
+## Sprint 21 – Kết nối Meta và API Governor (Giai đoạn 7)
+
+- Migration `0021`: schema `meta` (`apps`, `connections`, `assets`) và `integration.api_calls`, RLS. Quyền `meta.read` (chủ, quản trị, quản lý) và `meta.manage` (chủ, quản trị)
+- Trung tâm Meta (M17, đặc tả Phần 14): mỗi doanh nghiệp khai báo Meta App của mình (App ID; App Secret nằm trong Secret Vault, chỉ ghi tên). Đăng nhập bằng hộp thoại OAuth chính thức của Meta (`state` dùng một lần, 10 phút, gắn với người và tenant), đổi sang token dài hạn khoảng 60 ngày. Không dùng cookie, mật khẩu hay trình duyệt giả lập
+- Token người dùng và token Page được mã hóa bằng khóa của Secret Vault (AES-256-GCM, gắn với tenant và dòng), không bao giờ trả về trình duyệt. Mỗi lượt gọi kèm `appsecret_proof`
+- Một tài khoản Facebook mỗi doanh nghiệp. Đồng bộ Page (kèm Instagram gắn với Page) và tài khoản quảng cáo, đọc từng trang bằng con trỏ (tối đa 3 trang, mỗi trang 100). Bật tối đa 20 Page và 10 tài khoản quảng cáo; tài sản không còn quyền bị tắt và xóa token
+- Kiểm tra token và quyền (`debug_token`, `/me/permissions`); chức năng chỉ “sẵn sàng” khi quyền đã được cấp. Ngắt kết nối báo Meta thu hồi quyền và xóa mọi token
+- API Governor (Phần 15) cho mọi lượt gọi Meta: ngân sách 24 giờ theo 8 nhóm (tổng 3.000, chỉnh được), nhóm hết phần thì mượn Dự phòng; ngưỡng 75% hoãn việc nền, 85% chỉ việc thiết yếu, 90% tạm dừng. Đọc `X-App-Usage`, `X-Page-Usage`, `X-Ad-Account-Usage`, `X-Business-Use-Case-Usage`; thiếu số liệu thì ghi UNKNOWN hoặc STALE, không đoán. Meta báo giới hạn (mã 4, 17, 32, 613, 80000–80014) thì dừng cả ứng dụng hoặc nhóm đó đúng thời gian Meta yêu cầu (mặc định 60 phút). Token mất hiệu lực (190) thì đánh dấu kết nối. Cache và gộp lượt đọc trùng (cache lâu hơn khi gần hết hạn mức), thử lại lượt đọc lỗi tạm thời, ngắt mạch sau 5 lỗi trong 1 phút. Mọi lượt gọi và lượt bị từ chối được ghi (chỉ đường dẫn, không có token hay mã)
+- Web: `/meta` (Meta App, tài khoản Facebook, chức năng theo quyền, Page/Instagram/tài khoản quảng cáo, hạn mức API, lượt gọi gần đây), `/meta/callback`
+- Giới hạn: chưa đăng bài, chưa nhận webhook, chưa đọc quảng cáo (Sprint 22–25). Hàng đợi lỗi (dead letter) và idempotency cho lệnh ghi làm cùng phần xuất bản ở Sprint 22
+
+## Sprint 20 – Dây chuyền kiểm định nội dung (Giai đoạn 6, đã merge)
 
 - Migration `0020`: cột `media_width`, `media_height`, `duration_ms` của `content.item_versions`. Cỡ ảnh (PNG, JPEG, GIF, WebP) và cỡ, thời lượng video MP4/MOV đọc từ 64 KB đầu của tệp khi nhận; video có chỉ mục ở cuối tệp thì để trống
 - Kiểm định tự động (đặc tả Phần 12, M30) chạy trên phiên bản hiện tại, không lưu bảng riêng nên luôn khớp với quy tắc mới nhất. Ba mức: lỗi, cảnh báo, thông tin

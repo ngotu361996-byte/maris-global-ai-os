@@ -1012,3 +1012,75 @@ export const contentGenerations = content.table('generations', {
   createdAt: ts('created_at').notNull().defaultNow(),
   finishedAt: ts('finished_at'),
 });
+
+// Phase 7 (Sprint 21): Meta Control Center and the API Governor.
+export const meta = pgSchema('meta');
+
+export const metaApps = meta.table('apps', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  appId: text('app_id').notNull(),
+  appSecretName: text('app_secret_name').notNull(),
+  graphVersion: text('graph_version').notNull(),
+  budgets: jsonb('budgets').$type<Record<string, number>>().notNull().default({}),
+  updatedBy: uuid('updated_by').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const metaConnections = meta.table('connections', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  fbUserId: text('fb_user_id').notNull(),
+  fbName: text('fb_name').notNull(),
+  tokenSealed: text('token_sealed'),
+  tokenExpiresAt: ts('token_expires_at'),
+  scopes: text('scopes').array().notNull().default([]),
+  declined: text('declined').array().notNull().default([]),
+  status: text('status')
+    .$type<'active' | 'expired' | 'invalid' | 'removed'>()
+    .notNull()
+    .default('active'),
+  checkError: text('check_error'),
+  connectedBy: uuid('connected_by').notNull(),
+  connectedAt: ts('connected_at').notNull().defaultNow(),
+  checkedAt: ts('checked_at'),
+  syncedAt: ts('synced_at'),
+  removedAt: ts('removed_at'),
+});
+
+export const metaAssets = meta.table('assets', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  connectionId: uuid('connection_id').notNull(),
+  kind: text('kind').$type<'page' | 'instagram' | 'ad_account'>().notNull(),
+  externalId: text('external_id').notNull(),
+  name: text('name').notNull(),
+  username: text('username'),
+  category: text('category'),
+  pageId: uuid('page_id'),
+  currency: text('currency'),
+  timezone: text('timezone'),
+  accountStatus: integer('account_status'),
+  tasks: text('tasks').array().notNull().default([]),
+  tokenSealed: text('token_sealed'),
+  enabled: boolean('enabled').notNull().default(false),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+  removedAt: ts('removed_at'),
+});
+
+export const apiCalls = integration.table('api_calls', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  provider: text('provider').$type<'meta'>().notNull(),
+  apiGroup: text('api_group').notNull(),
+  method: text('method').$type<'GET' | 'POST' | 'DELETE'>().notNull(),
+  path: text('path').notNull(),
+  assetId: uuid('asset_id'),
+  outcome: text('outcome').$type<'ok' | 'failed' | 'refused'>().notNull(),
+  httpStatus: integer('http_status'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  durationMs: integer('duration_ms'),
+  usage: jsonb('usage').$type<Record<string, unknown>>(),
+  calledBy: uuid('called_by'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});

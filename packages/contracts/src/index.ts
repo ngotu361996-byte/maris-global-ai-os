@@ -21,3 +21,4 @@ export * from './devices';
 export * from './worker-jobs';
 export * from './monitor';
 export * from './content';
+export * from './meta';

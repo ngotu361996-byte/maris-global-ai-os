@@ -1,0 +1,241 @@
+import { z } from 'zod';
+
+/**
+ * Meta Control Center (spec Part 14) and the API Governor (Part 15). The limits are MARIS's own
+ * product limits for the BUSINESS plan, not limits or safety promises from Meta.
+ */
+export const META_LIMITS = {
+  pages: 20,
+  adAccounts: 10,
+  repliesPerDay: 400,
+  postsPerPagePerDay: 3,
+  postsPerDay: 60,
+  apiCallsPerDay: 3000,
+} as const;
+
+export const META_DEFAULT_GRAPH_VERSION = 'v23.0';
+
+/** API groups and their default daily budget (Part 15). Total 3,000 calls. */
+export const API_GROUPS = [
+  'reply',
+  'lookup',
+  'publish',
+  'page_insights',
+  'ads_insights',
+  'ads_manage',
+  'sync',
+  'reserve',
+] as const;
+export type ApiGroup = (typeof API_GROUPS)[number];
+
+export const API_GROUP_INFO: Record<ApiGroup, { label: string; budget: number }> = {
+  reply: { label: 'Trả lời khách hàng', budget: 400 },
+  lookup: { label: 'Tra cứu bổ sung', budget: 100 },
+  publish: { label: 'Xuất bản và trạng thái', budget: 240 },
+  page_insights: { label: 'Phân tích Page và nội dung', budget: 680 },
+  ads_insights: { label: 'Phân tích quảng cáo', budget: 480 },
+  ads_manage: { label: 'Quản lý quảng cáo', budget: 200 },
+  sync: { label: 'Đồng bộ tài sản', budget: 100 },
+  reserve: { label: 'Dự phòng', budget: 800 },
+};
+
+/**
+ * How urgent a call is. Essential calls (a customer reply, a scheduled post, signing in) keep
+ * going longest; background calls (sync, analysis) are put off first.
+ */
+export type ApiPriority = 'essential' | 'normal' | 'background';
+
+/** Internal thresholds of Part 15, by the share of the budget used. */
+export const GOVERNOR_LEVELS = [
+  { from: 0, label: 'Hoạt động bình thường' },
+  { from: 50, label: 'Tăng cache' },
+  { from: 65, label: 'Giảm tần suất phân tích' },
+  { from: 75, label: 'Hoãn đồng bộ không cần thiết' },
+  { from: 85, label: 'Chỉ việc thiết yếu' },
+  { from: 90, label: 'Tạm dừng nhóm API' },
+] as const;
+
+/** Permissions MARIS asks Meta for, and what each one is needed for. */
+export const META_SCOPES = [
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_metadata',
+  'pages_manage_posts',
+  'pages_manage_engagement',
+  'pages_read_user_content',
+  'pages_messaging',
+  'read_insights',
+  'instagram_basic',
+  'instagram_content_publish',
+  'instagram_manage_comments',
+  'instagram_manage_messages',
+  'leads_retrieval',
+  'ads_read',
+  'ads_management',
+  'business_management',
+] as const;
+
+export const META_FEATURES = [
+  { key: 'pages', label: 'Xem Page', scopes: ['pages_show_list'] },
+  {
+    key: 'publish',
+    label: 'Đăng bài lên Page',
+    scopes: ['pages_manage_posts', 'pages_read_engagement'],
+  },
+  {
+    key: 'instagram',
+    label: 'Đăng lên Instagram',
+    scopes: ['instagram_basic', 'instagram_content_publish'],
+  },
+  {
+    key: 'comments',
+    label: 'Bình luận Facebook và Instagram',
+    scopes: ['pages_manage_engagement', 'pages_read_user_content', 'instagram_manage_comments'],
+  },
+  {
+    key: 'messages',
+    label: 'Messenger và tin nhắn Instagram',
+    scopes: ['pages_messaging', 'instagram_manage_messages', 'pages_manage_metadata'],
+  },
+  { key: 'insights', label: 'Phân tích Page', scopes: ['read_insights'] },
+  { key: 'leads', label: 'Lead Ads', scopes: ['leads_retrieval'] },
+  { key: 'ads_read', label: 'Xem quảng cáo và chi tiêu', scopes: ['ads_read'] },
+  { key: 'ads_manage', label: 'Quản lý quảng cáo', scopes: ['ads_management'] },
+] as const;
+
+export const setMetaAppSchema = z.object({
+  appId: z.string().regex(/^[0-9]{5,20}$/, 'App ID là dãy số'),
+  appSecretName: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,99}$/),
+  graphVersion: z
+    .string()
+    .regex(/^v[0-9]{2}\.0$/, 'dạng v23.0')
+    .default(META_DEFAULT_GRAPH_VERSION),
+  budgets: z.partialRecord(z.enum(API_GROUPS), z.number().int().min(0).max(100_000)).default({}),
+});
+export type SetMetaApp = z.infer<typeof setMetaAppSchema>;
+
+export const metaCallbackSchema = z.object({
+  code: z.string().min(1).max(2000),
+  state: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+});
+export type MetaCallback = z.infer<typeof metaCallbackSchema>;
+
+export const updateMetaAssetSchema = z.object({ enabled: z.boolean() });
+export type UpdateMetaAsset = z.infer<typeof updateMetaAssetSchema>;
+
+export type MetaAssetKind = 'page' | 'instagram' | 'ad_account';
+
+export interface MetaAssetResponse {
+  id: string;
+  kind: MetaAssetKind;
+  externalId: string;
+  name: string;
+  username: string | null;
+  category: string | null;
+  pageId: string | null;
+  currency: string | null;
+  timezone: string | null;
+  accountStatus: number | null;
+  tasks: string[];
+  enabled: boolean;
+  removed: boolean;
+  syncedAt: string;
+}
+
+export interface MetaConnectionResponse {
+  id: string;
+  fbUserId: string;
+  fbName: string;
+  status: 'active' | 'expired' | 'invalid';
+  tokenExpiresAt: string | null;
+  scopes: string[];
+  declined: string[];
+  checkError: string | null;
+  connectedByName: string;
+  connectedAt: string;
+  checkedAt: string | null;
+  syncedAt: string | null;
+}
+
+export type GovernorGroupState = 'ok' | 'essential_only' | 'no_background' | 'paused' | 'blocked';
+
+export interface GovernorGroupResponse {
+  group: ApiGroup;
+  label: string;
+  used: number;
+  budget: number;
+  pct: number;
+  state: GovernorGroupState;
+  blockedUntil: string | null;
+}
+
+/** Meta's own usage figures from the last response headers, or why they are not known. */
+export interface PlatformUsage {
+  status: 'known' | 'unknown' | 'stale';
+  /** Highest share of any Meta limit in the last headers, 0–100. */
+  pct: number | null;
+  at: string | null;
+  detail: {
+    header: string;
+    key: string;
+    callCount: number | null;
+    totalTime: number | null;
+    totalCputime: number | null;
+  }[];
+}
+
+export interface GovernorResponse {
+  windowHours: 24;
+  used: number;
+  budget: number;
+  pct: number;
+  level: string;
+  cacheHits: number;
+  groups: GovernorGroupResponse[];
+  platform: PlatformUsage;
+  blockedUntil: string | null;
+}
+
+export interface MetaAppResponse {
+  appId: string;
+  appSecretName: string;
+  secretFound: boolean;
+  graphVersion: string;
+  redirectUri: string;
+  budgets: Partial<Record<ApiGroup, number>>;
+}
+
+export interface MetaFeatureResponse {
+  key: string;
+  label: string;
+  ready: boolean;
+  missing: string[];
+}
+
+export interface MetaStatusResponse {
+  app: MetaAppResponse | null;
+  /** Where Meta sends the person back to after sign-in; add it to the Meta App. */
+  redirectUri: string;
+  connection: MetaConnectionResponse | null;
+  features: MetaFeatureResponse[];
+  assets: MetaAssetResponse[];
+  governor: GovernorResponse;
+}
+
+export interface MetaOauthStartResponse {
+  url: string;
+}
+
+export interface ApiCallResponse {
+  id: string;
+  group: string;
+  method: string;
+  path: string;
+  outcome: 'ok' | 'failed' | 'refused';
+  httpStatus: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  durationMs: number | null;
+  calledByName: string | null;
+  createdAt: string;
+}
