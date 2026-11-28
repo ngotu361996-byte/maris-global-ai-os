@@ -38,6 +38,10 @@ const envSchema = z.object({
   FILE_MAX_MB: z.coerce.number().int().min(1).max(500).default(25),
   // Files in the content library (videos are large). Streamed to disk, never held in memory.
   CONTENT_MAX_MB: z.coerce.number().int().min(1).max(20_000).default(2048),
+  // Meta Graph API and the Facebook sign-in page. Changed only for tests.
+  META_GRAPH_URL: z.string().url().default('https://graph.facebook.com'),
+  META_DIALOG_URL: z.string().url().default('https://www.facebook.com'),
+  META_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
   NODE_ENV: z.string().default('development'),
 });
 

@@ -85,6 +85,18 @@ export class SecretVaultService {
     return this.open(row.ciphertext, tenantId, row.id);
   }
 
+  /**
+   * Seals a value that another module stores in its own row (such as a Meta token), bound to
+   * `<scope>:<rowId>` and the tenant so it cannot be moved to another row, tenant or module.
+   */
+  sealFor(scope: string, tenantId: string, rowId: string, value: string): string {
+    return this.seal(value, tenantId, `${scope}:${rowId}`);
+  }
+
+  openFor(scope: string, tenantId: string, rowId: string, sealed: string): string {
+    return this.open(sealed, tenantId, `${scope}:${rowId}`);
+  }
+
   private seal(value: string, tenantId: string, id: string): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
