@@ -88,10 +88,21 @@ Nhận lead từ quảng cáo:
 
 Tên, số điện thoại và email của khách chỉ hiện cho người có quyền xem CRM và không ghi vào nhật ký kiểm toán.
 
-## 7. Hạn mức
+## 7. Quảng cáo và chi tiêu
+
+Trang **Trung tâm quảng cáo** (`/ads`) cho thấy chi tiêu và kết quả của mọi tài khoản quảng cáo đang bật ở Trung tâm Meta.
+
+1. Meta App cần trường hợp sử dụng **Create & manage ads with Marketing API** (cấp `ads_read`, `ads_management`). Nếu trước đây chưa có, thêm rồi bấm **Kết nối lại** ở Trung tâm Meta và bật các tài khoản quảng cáo.
+2. Bấm **Đọc Meta ngay** ở Trung tâm quảng cáo. Lần đầu MARIS lấy chiến dịch, nhóm quảng cáo, quảng cáo và số liệu 30 ngày. Sau đó MARIS tự đọc mỗi 30 phút (`META_ADS_POLL_MIN`, đặt 0 để tắt), mỗi lượt một tài khoản.
+3. Chọn 7, 14 hoặc 30 ngày và từng tài khoản. Có chi tiêu, hiển thị, nhấp, CTR, CPC, CPM, kết quả (mua + lead + cuộc trò chuyện Messenger), chi phí mỗi kết quả (CPA) và ROAS. Số mua và giá trị mua là **Meta báo cáo**, không phải tiền doanh nghiệp đã nhận.
+4. **Cảnh báo và gợi ý**: tài khoản không hoạt động, quảng cáo bị Meta từ chối, chi tiêu hôm nay tăng vọt, CPA tăng, tốn tiền chưa có kết quả, CTR thấp, chiến dịch bật mà không hiển thị. MARIS chỉ báo, không tự sửa.
+5. **Tạm dừng / Bật lại / Đổi ngân sách hằng ngày** (người có quyền Quản lý quảng cáo). Tạm dừng và giảm ngân sách gửi Meta ngay. Chủ hoặc quản trị đặt **giới hạn ngân sách hằng ngày** cho mỗi tài khoản: tăng ngân sách vượt giới hạn, hoặc bật lại mục có ngân sách vượt giới hạn, phải chờ chủ hoặc quản trị **Duyệt và gửi Meta**. Khi chưa đặt giới hạn, mọi lần tăng và bật lại đều cần duyệt.
+6. Quảng cáo bị Meta từ chối thì sửa và gửi lại trong Trình quản lý quảng cáo của Meta; MARIS không bật lại để né kiểm duyệt.
+
+## 8. Hạn mức
 
 Gói BUSINESS cho 1 tài khoản Facebook, tối đa 20 Page và 10 tài khoản quảng cáo, 400 lượt trả lời khách mỗi ngày, khoảng 3.000 lượt gọi API mỗi ngày, chia theo nhóm (đặc tả Phần 15). Đây là giới hạn nội bộ của MARIS, không phải hạn mức hay cam kết của Meta. Khi Meta báo giới hạn, MARIS dừng gọi đúng thời gian Meta yêu cầu.
 
-## 8. Ngắt kết nối
+## 9. Ngắt kết nối
 
 Bấm **Ngắt kết nối** ở Trung tâm Meta. MARIS báo Meta thu hồi quyền và xóa mọi token đã lưu. Có thể gỡ thêm ứng dụng trong **Cài đặt Facebook → Doanh nghiệp tích hợp**.

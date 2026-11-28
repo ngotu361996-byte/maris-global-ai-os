@@ -188,6 +188,17 @@ tenant và chỉ mục duy nhất từng phần (bỏ qua khách đã lưu trữ
 sửa, giai đoạn, phụ trách, ghi chú và gắn hội thoại `meta.threads.contact_id`. Audit chỉ ghi mã và tên trường, không ghi tên,
 số điện thoại hay email của khách.
 
+Quảng cáo và chi tiêu (Sprint 25): `meta.ad_objects` (chiến dịch, nhóm quảng cáo, quảng cáo), `meta.ad_insights` (số liệu
+theo ngày của từng chiến dịch, ngày theo múi giờ tài khoản, khóa chính `(object_id, day)`), `meta.ad_changes` (mọi thay đổi gửi
+Meta, chỉ mục duy nhất một thay đổi đang mở mỗi loại mỗi mục). `MetaAdsService` đọc dưới ngữ cảnh tenant sau khi
+`withSystem('meta_ads')` liệt kê kết nối: mỗi phút một tài khoản quảng cáo tới hạn (`META_ADS_POLL_MIN`, mặc định 30),
+cấu trúc (`/campaigns`, `/adsets`, `/ads`) mỗi 3 giờ hoặc khi gặp chiến dịch mới, `/insights?level=campaign&time_increment=1`
+lần đầu 30 ngày rồi 3 ngày gần nhất; tất cả nhóm `ads_insights`, token người dùng. Quy tắc thuần (đơn vị tiền theo offset
+tiền tệ của Meta, đọc `actions` không cộng trùng, CTR/CPC/CPM/CPA/ROAS, cảnh báo, cần duyệt hay không) nằm ở `ads-analysis.ts`.
+Thay đổi: ghi `meta.ad_changes` + audit trong một transaction; không cần duyệt thì giành `pending → applying` rồi
+`POST /{id}` nhóm `ads_manage` (tạm dừng ưu tiên `essential`), rồi ghi `applied`/`failed` + audit. Vượt `meta.assets.ads_daily_cap`
+thì chờ người có `ads.approve`.
+
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.

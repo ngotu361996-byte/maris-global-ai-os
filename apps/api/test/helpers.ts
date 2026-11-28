@@ -16,7 +16,7 @@ export const APP_URL =
 export async function resetDatabase(): Promise<void> {
   await migrate(ADMIN_URL);
   const sql = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
-  await sql`TRUNCATE crm.activities, meta.leads, meta.lead_forms, meta.webhook_events, meta.messages, meta.threads, crm.contacts, meta.posts, integration.api_calls, meta.assets, meta.connections, meta.apps, content.media_outputs, content.generations, content.item_versions, content.items, content.assets, content.folders, infra.worker_job_logs, infra.worker_jobs, infra.device_events, infra.device_metrics, infra.devices, ext.plugin_components, ext.plugin_versions, ext.plugins, ext.trusted_publishers, integration.webhook_events, integration.connector_calls, integration.connectors, work.workflow_run_steps, ai.files, ai.plans, ai.council_turns, ai.provider_calls, ai.councils, ai.models, ai.tasks, work.workflow_runs, work.workflow_versions, work.workflow_definitions, ai.skills, ai.budgets, ai.controls, ai.messages, ai.conversations, ai.memories, ai.projects, ai.agent_versions, ai.agents, ai.providers, work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
+  await sql`TRUNCATE meta.ad_changes, meta.ad_insights, meta.ad_objects, crm.activities, meta.leads, meta.lead_forms, meta.webhook_events, meta.messages, meta.threads, crm.contacts, meta.posts, integration.api_calls, meta.assets, meta.connections, meta.apps, content.media_outputs, content.generations, content.item_versions, content.items, content.assets, content.folders, infra.worker_job_logs, infra.worker_jobs, infra.device_events, infra.device_metrics, infra.devices, ext.plugin_components, ext.plugin_versions, ext.plugins, ext.trusted_publishers, integration.webhook_events, integration.connector_calls, integration.connectors, work.workflow_run_steps, ai.files, ai.plans, ai.council_turns, ai.provider_calls, ai.councils, ai.models, ai.tasks, work.workflow_runs, work.workflow_versions, work.workflow_definitions, ai.skills, ai.budgets, ai.controls, ai.messages, ai.conversations, ai.memories, ai.projects, ai.agent_versions, ai.agents, ai.providers, work.outbox_events, security.secrets, identity.invitations, security.audit_logs,
             identity.tenant_members, identity.role_permissions, identity.roles, identity.sessions,
             identity.tenants, identity.users`;
   await sql.end();
@@ -38,6 +38,8 @@ export async function startApp(env: Record<string, string> = {}): Promise<INestA
     REDIS_URL,
     // Tests drive the relay by hand with relayOnce().
     OUTBOX_RELAY_ENABLED: 'false',
+    // Tests read ad accounts by hand with syncTenant().
+    META_ADS_POLL_MIN: '0',
     ...env,
   });
   const app = await createApp(config);

@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   customType,
+  date,
   integer,
   jsonb,
   numeric,
@@ -1071,6 +1072,10 @@ export const metaAssets = meta.table('assets', {
   removedAt: ts('removed_at'),
   inboxSyncedAt: ts('inbox_synced_at'),
   leadsSyncedAt: ts('leads_synced_at'),
+  adsSyncedAt: ts('ads_synced_at'),
+  adsStructureAt: ts('ads_structure_at'),
+  adsDailyCap: bigint('ads_daily_cap', { mode: 'number' }),
+  adsError: text('ads_error'),
 });
 
 export const apiCalls = integration.table('api_calls', {
@@ -1254,4 +1259,71 @@ export const crmActivities = crm.table('activities', {
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
   actorId: uuid('actor_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------- Meta Ads (Sprint 25)
+
+export type AdLevel = 'campaign' | 'adset' | 'ad';
+
+export const metaAdObjects = meta.table('ad_objects', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  assetId: uuid('asset_id').notNull(),
+  level: text('level').$type<AdLevel>().notNull(),
+  externalId: text('external_id').notNull(),
+  campaignId: uuid('campaign_id'),
+  adsetId: uuid('adset_id'),
+  name: text('name').notNull(),
+  status: text('status').notNull(),
+  effectiveStatus: text('effective_status').notNull(),
+  objective: text('objective'),
+  dailyBudget: bigint('daily_budget', { mode: 'number' }),
+  lifetimeBudget: bigint('lifetime_budget', { mode: 'number' }),
+  present: boolean('present').notNull().default(true),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+// numeric columns come back as strings.
+export const metaAdInsights = meta.table(
+  'ad_insights',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    assetId: uuid('asset_id').notNull(),
+    objectId: uuid('object_id').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    spend: numeric('spend', { precision: 18, scale: 2 }).notNull().default('0'),
+    impressions: bigint('impressions', { mode: 'number' }).notNull().default(0),
+    reach: bigint('reach', { mode: 'number' }).notNull().default(0),
+    clicks: bigint('clicks', { mode: 'number' }).notNull().default(0),
+    linkClicks: bigint('link_clicks', { mode: 'number' }).notNull().default(0),
+    purchases: bigint('purchases', { mode: 'number' }).notNull().default(0),
+    purchaseValue: numeric('purchase_value', { precision: 18, scale: 2 }).notNull().default('0'),
+    leads: bigint('leads', { mode: 'number' }).notNull().default(0),
+    messages: bigint('messages', { mode: 'number' }).notNull().default(0),
+    syncedAt: ts('synced_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.objectId, t.day] })],
+);
+
+export type AdChangeStatus =
+  'pending' | 'applying' | 'applied' | 'failed' | 'rejected' | 'cancelled';
+
+export const metaAdChanges = meta.table('ad_changes', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  objectId: uuid('object_id').notNull(),
+  kind: text('kind').$type<'status' | 'daily_budget'>().notNull(),
+  fromValue: text('from_value'),
+  toValue: text('to_value').notNull(),
+  reason: text('reason').notNull().default(''),
+  status: text('status').$type<AdChangeStatus>().notNull().default('pending'),
+  needsApproval: boolean('needs_approval').notNull().default(false),
+  requestedBy: uuid('requested_by'),
+  decidedBy: uuid('decided_by'),
+  decisionNote: text('decision_note'),
+  error: text('error'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  decidedAt: ts('decided_at'),
+  appliedAt: ts('applied_at'),
 });

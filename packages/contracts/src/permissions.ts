@@ -30,6 +30,9 @@ export const PERMISSIONS = [
   'inbox.reply',
   'crm.read',
   'crm.manage',
+  'ads.read',
+  'ads.manage',
+  'ads.approve',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -53,6 +56,8 @@ export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
     'inbox.reply',
     'crm.read',
     'crm.manage',
+    'ads.read',
+    'ads.manage',
   ],
   member: [
     'tenant.read',
