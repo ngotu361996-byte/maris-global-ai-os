@@ -6,6 +6,7 @@ import { DbService, type Tx } from '../db/db.service';
 import { RedisService } from '../redis/redis.module';
 import { SecretVaultService } from '../secrets/secret-vault.service';
 import {
+  grantedScopes,
   graphqlProblem,
   httpErrorKind,
   shopifyTokenMessage,
@@ -23,6 +24,8 @@ const MAX_BODY = 8 * 1024 * 1024;
 const RATE_BLOCK_SEC = 60;
 /** Get a new Shopify token (24 hours) this long before it runs out. */
 const TOKEN_MARGIN_MS = 10 * 60_000;
+/** How often a missing-access error may fetch a new token for the same store. */
+const RESCOPE_MS = 5 * 60_000;
 
 export interface CommerceCtx {
   tenantId: string;
@@ -59,6 +62,7 @@ export interface ShopifyAnswer<T> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const tokenKey = (t: StoreTarget) => t.id ?? `new:${t.externalId}:${t.clientId}`;
 
 /**
  * The managed gateway for every call to Shopify and POSCake (spec Parts 15 and 18).
@@ -71,6 +75,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 @Injectable()
 export class CommerceApiService {
   private readonly tokens = new Map<string, { token: string; exp: number; scopes: string[] }>();
+  private readonly rescoped = new Map<string, number>();
 
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
@@ -112,7 +117,7 @@ export class CommerceApiService {
     t: StoreTarget,
     fresh = false,
   ): Promise<{ token: string; scopes: string[] }> {
-    const key = t.id ?? `new:${t.externalId}:${t.clientId}`;
+    const key = tokenKey(t);
     const hit = this.tokens.get(key);
     if (!fresh && hit && hit.exp - TOKEN_MARGIN_MS > Date.now()) return hit;
     const secret = await this.secretFor(ctx, t);
@@ -151,7 +156,7 @@ export class CommerceApiService {
     if (!res.ok || !body?.access_token) {
       const message =
         res.status === 404
-          ? `Không tìm thấy cửa hàng ${t.externalId} trên Shopify`
+          ? `Không tìm thấy cửa hàng ${t.externalId} trên Shopify. Xem địa chỉ ...myshopify.com đúng trong trang quản trị Shopify: Cài đặt → Miền`
           : shopifyTokenMessage(body);
       await this.log(ctx, t, 'connect', 'POST', path, {
         outcome: 'failed',
@@ -175,14 +180,32 @@ export class CommerceApiService {
     });
     const v = {
       token: body.access_token,
-      scopes: (body.scope ?? '')
-        .split(/[,\s]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      scopes: grantedScopes(body.scope),
       exp: Date.now() + (body.expires_in ?? 86_399) * 1000,
     };
     this.tokens.set(key, v);
     return v;
+  }
+
+  /**
+   * Shopify refused a field for missing access. The merchant may have approved new scopes since
+   * the cached token was issued, so get a new token (at most every few minutes per store).
+   * True when the new token carries different scopes.
+   */
+  private async rescope(ctx: CommerceCtx, t: StoreTarget): Promise<boolean> {
+    const key = tokenKey(t);
+    if (Date.now() - (this.rescoped.get(key) ?? 0) < RESCOPE_MS) return false;
+    this.rescoped.set(key, Date.now());
+    const before = this.tokens.get(key)?.scopes.join(',');
+    const v = await this.shopifyToken(ctx, t, true);
+    if (v.scopes.join(',') === before) return false;
+    if (t.id) {
+      const id = t.id;
+      await this.db.withContext(ctx, (tx) =>
+        tx.update(commerceStores).set({ scopes: v.scopes }).where(eq(commerceStores.id, id)),
+      );
+    }
+    return true;
   }
 
   /** One Admin GraphQL request. `name` labels it in the call log. */
@@ -198,6 +221,7 @@ export class CommerceApiService {
     const logPath = `${path} ${name}`;
     const repeatable = group !== 'write';
     let refreshed = false;
+    let rescoped = false;
     let throttles = 0;
     for (let attempt = 1; ; attempt++) {
       await this.checkBlock(ctx, t, group, 'POST', logPath);
@@ -240,6 +264,22 @@ export class CommerceApiService {
       } | null;
       const errors = Array.isArray(body?.errors) ? body.errors : undefined;
       const problem = res.ok ? graphqlProblem(errors) : null;
+      const denied = errors?.some((e) => e.extensions?.code === 'ACCESS_DENIED');
+      if (denied && !rescoped) {
+        rescoped = true;
+        // Reads run again with the new token; a refused write was not applied, so it is left to the user.
+        if ((await this.rescope(ctx, t)) && repeatable) {
+          await this.log(ctx, t, group, 'POST', logPath, {
+            outcome: 'failed',
+            httpStatus: res.status,
+            errorCode: 'SHOPIFY_RESCOPED',
+            message: 'Shopify báo thiếu quyền; MARIS lấy mã mới với quyền vừa cấp và đọc lại',
+            durationMs: Date.now() - started,
+          });
+          attempt--;
+          continue;
+        }
+      }
       if (res.ok && body?.data && (!problem || problem.kind === 'invalid' || problem.kind === 'permission')) {
         // Data came back; field errors (a field the app may not read) are warnings.
         await this.log(ctx, t, group, 'POST', logPath, { outcome: 'ok', httpStatus: res.status, durationMs });
@@ -259,7 +299,7 @@ export class CommerceApiService {
       });
       if (kind === 'auth' && !refreshed) {
         // The token may have been revoked (app reinstalled, secret rotated): get a new one, once.
-        this.tokens.delete(t.id ?? '');
+        this.tokens.delete(tokenKey(t));
         await this.shopifyToken(ctx, t, true);
         refreshed = true;
         attempt--;

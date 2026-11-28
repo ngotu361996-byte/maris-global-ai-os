@@ -38,6 +38,8 @@ class FakeStores {
   scope = ALL_SCOPES;
   throttleNext = 0;
   revokeNext = false;
+  /** Locations answers ACCESS_DENIED to this token (scopes granted after it was issued). */
+  deniedToken: string | null = null;
   posFail: number | null = null;
   variants = [
     { id: 1, product: 10, title: 'S', sku: 'AO-01', price: '199000.00', qty: { 1: 7, 2: 3 }, tracked: true },
@@ -176,6 +178,12 @@ class FakeStores {
     }
     const ok = (data: unknown) => send(200, { data, extensions: { cost } });
     if (q.startsWith('query Shop')) return ok({ shop: { name: 'Maris Fishing', currencyCode: 'VND' } });
+    if (q.startsWith('query Locations') && this.deniedToken === this.token)
+      return send(200, {
+        data: null,
+        errors: [{ message: 'Access denied for locations field.', extensions: { code: 'ACCESS_DENIED' } }],
+        extensions: { cost },
+      });
     if (q.startsWith('query Locations'))
       return ok({
         locations: {
@@ -574,6 +582,26 @@ describe('Sprint 28 (e2e): Shopify and POSCake', () => {
     await http.post(`${B}/stores/${shopifyId}/sync`).set(as()).expect(200);
     expect(stores.tokens).toBe(before + 1);
     expect((await http.get(B).set(as()).expect(200)).body.stores[0].status).toBe('active');
+  });
+
+  it('takes newly approved scopes without a restart, counting read scopes that writes include', async () => {
+    stores.scope = 'write_products,write_inventory,read_orders';
+    stores.deniedToken = stores.token;
+    const before = stores.tokens;
+    const r = await http.post(`${B}/stores/${shopifyId}/sync`).set(as()).expect(200);
+    expect(r.body.errors).toEqual([]);
+    expect(stores.tokens).toBe(before + 1);
+    const s = (await http.get(B).set(as()).expect(200)).body.stores.find((x: { id: string }) => x.id === shopifyId);
+    expect(s).toMatchObject({ status: 'active', canWrite: true, syncError: null });
+    expect(s.missingScopes).toEqual(['read_locations']);
+    const calls = (await http.get(`${B}/calls`).set(as()).expect(200)).body as { errorCode: string | null }[];
+    expect(calls.some((c) => c.errorCode === 'SHOPIFY_RESCOPED')).toBe(true);
+    // Another refusal soon after does not fetch yet another token.
+    stores.deniedToken = stores.token;
+    await http.post(`${B}/stores/${shopifyId}/sync`).set(as());
+    expect(stores.tokens).toBe(before + 1);
+    stores.deniedToken = null;
+    stores.scope = ALL_SCOPES;
   });
 
   it('reports sales per store and marks a refused POSCake key', async () => {

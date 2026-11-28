@@ -376,11 +376,14 @@ describe('Sprint 24 (e2e): CRM and Meta Lead Ads', () => {
       { full_name: 'Lan', phone_number: '0911222333' },
       { form_id: '7003' },
     );
-    expect((await deliver(leadgenEvent('8201', '7003')).expect(200)).body).toEqual({
+    // Meta sends the same delivery again when it does not hear back; built once so the
+    // second copy is identical even across a second boundary.
+    const event = leadgenEvent('8201', '7003');
+    expect((await deliver(event).expect(200)).body).toEqual({
       received: 1,
       stored: 1,
     });
-    expect((await deliver(leadgenEvent('8201', '7003')).expect(200)).body).toEqual({
+    expect((await deliver(event).expect(200)).body).toEqual({
       received: 1,
       stored: 0,
     });

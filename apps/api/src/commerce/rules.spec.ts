@@ -1,5 +1,5 @@
 import { shopifyDomain } from '@maris/contracts';
-import {
+import { grantedScopes,
   graphqlProblem,
   money,
   poscakeMoney,
@@ -63,5 +63,17 @@ describe('commerce rules', () => {
     expect(
       throttleWaitSec({ cost: { requestedQueryCost: 400, throttleStatus: { currentlyAvailable: 100, restoreRate: 100 } } }),
     ).toBe(3);
+  });
+
+  it('counts the read scope that a write scope includes', () => {
+    expect(grantedScopes('write_products,read_orders, write_inventory read_locations')).toEqual([
+      'read_inventory',
+      'read_locations',
+      'read_orders',
+      'read_products',
+      'write_inventory',
+      'write_products',
+    ]);
+    expect(grantedScopes(undefined)).toEqual([]);
   });
 });
