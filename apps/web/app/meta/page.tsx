@@ -213,7 +213,12 @@ export default function MetaPage() {
 
   return (
     <Shell me={me}>
-      <h1 className="mb-1 text-xl font-semibold">Trung tâm Meta</h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Trung tâm Meta</h1>
+        <Link href="/meta/posts" className="text-sm text-accent underline">
+          Lịch đăng bài
+        </Link>
+      </div>
       <p className="mb-4 text-sm text-muted">
         Kết nối Facebook, Instagram và tài khoản quảng cáo bằng đăng nhập chính thức của Meta. MARIS
         không dùng cookie hay mật khẩu Facebook. Gói BUSINESS: 1 tài khoản Facebook, tối đa{' '}
@@ -232,6 +237,11 @@ export default function MetaPage() {
               Đăng nhập Facebook (Facebook Login for Business).
             </li>
             <li>
+              Ở mục Trường hợp sử dụng (Use cases), thêm “Quản lý mọi thứ trên Trang của bạn” và
+              “Quản lý tin nhắn và nội dung trên Instagram”; bấm Tùy chỉnh để thêm đủ quyền. Thiếu
+              bước này Facebook sẽ báo “Invalid Scopes”.
+            </li>
+            <li>
               Ở phần cài đặt đăng nhập, thêm “URI chuyển hướng OAuth hợp lệ”:{' '}
               <code className="rounded bg-bg px-1">{s.redirectUri}</code>
             </li>
@@ -240,7 +250,9 @@ export default function MetaPage() {
               <Link href="/secrets" className="text-accent underline">
                 Secret Vault
               </Link>{' '}
-              với tên bên dưới. Không dán khóa này vào đây hay vào chat.
+              với tên bên dưới (đúng 32 ký tự, không có dấu cách). Không dán khóa này vào đây hay
+              vào chat. Nếu Facebook báo “Error validating client secret”, khóa trong Vault không
+              khớp App ID: sao chép lại và cập nhật.
             </li>
             <li>Nhập ID ứng dụng (App ID) rồi lưu.</li>
           </ol>

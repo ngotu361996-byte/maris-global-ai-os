@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 21)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 22)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -10,7 +10,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7. Meta Platform | Sprint 21 (kết nối Meta và API Governor) đang review; kế tiếp: 22 xuất bản, 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
+| 7. Meta Platform | Sprint 21 (kết nối Meta và API Governor) đã merge; Sprint 22 (xuất bản lên Page và Instagram) đang review; kế tiếp: 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
 | 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -132,7 +132,18 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 21 – Kết nối Meta và API Governor (Giai đoạn 7)
+## Sprint 22 – Xuất bản lên Page và Instagram (Giai đoạn 7)
+
+- Migration `0022`: bảng `meta.posts` (lịch đăng, trạng thái, số lần thử, bước đã xong, mã bài trên Meta), RLS theo tenant và cho job hệ thống `meta_publisher`. Quyền `meta.publish` (chủ, quản trị, quản lý)
+- Chỉ đăng thành phẩm đã duyệt (hoặc đã xuất bản), kiểm định không lỗi, lên Page hoặc Instagram đang bật. Bài chữ thành bài viết trên Page; ảnh thành ảnh trên Page hoặc ảnh Instagram; video thành Reels (3–90 giây) hoặc video thường trên Page, Reels Instagram (3–900 giây). Kiểm tra cỡ tệp, thời lượng, chú thích Instagram (2.200 ký tự, 30 hashtag) trước khi xếp lịch
+- Hạn mức: 3 bài mỗi Page hoặc tài khoản mỗi ngày, 60 bài mỗi ngày cho cả doanh nghiệp, tính theo ngày ở `META_TIMEZONE` (mặc định giờ Việt Nam), giữ bằng khóa tư vấn. Mỗi phiên bản chỉ một bài cho mỗi nơi (chỉ mục duy nhất)
+- Bộ đăng chạy mỗi 30 giây, nhận tối đa 5 bài đến giờ (`FOR UPDATE SKIP LOCKED`, khóa 30 phút), đăng bằng token Page qua API Governor (nhóm `publish`, thiết yếu). Reels Page 3 bước (start, tải lên `rupload`, finish); ảnh Instagram qua ảnh Page ẩn tạm rồi `media` và `media_publish`; Reels Instagram tải lên dạng resumable rồi chờ Meta xử lý. Mỗi bước xong được lưu nên lần chạy sau không làm lại
+- Lỗi: Meta báo lỗi tạm thời thì thử lại tối đa 3 lần (5, 10 phút); Governor hoặc Meta yêu cầu dừng thì lùi 15 phút, không tính lần thử, quá 24 giờ thì dừng. Mất kết nối giữa lúc ghi, hoặc tiến trình dừng giữa chừng, thì không tự đăng lại mà chuyển sang lỗi “không rõ” (hàng đợi lỗi) để người kiểm tra rồi Thử lại hoặc Hủy. Mọi bước ghi audit
+- Bài đầu tiên đăng xong chuyển thành phẩm sang “đã xuất bản” kèm đường dẫn bài
+- Web: khung “Đăng lên Facebook và Instagram” trong Kho thành phẩm (chọn nơi đăng, Reels hay video, chú thích, đăng ngay hoặc hẹn giờ với khung 09:00, 12:00, 20:00); trang `/meta/posts` Lịch đăng bài (lọc trạng thái, Thử lại, Hủy). Hướng dẫn Meta App bổ sung bước Use case và lỗi App Secret
+- Giới hạn: chưa sửa hoặc xóa bài đã đăng, chưa đăng album hay story; chưa nhận webhook trạng thái (Sprint 23)
+
+## Sprint 21 – Kết nối Meta và API Governor (Giai đoạn 7, đã merge)
 
 - Migration `0021`: schema `meta` (`apps`, `connections`, `assets`) và `integration.api_calls`, RLS. Quyền `meta.read` (chủ, quản trị, quản lý) và `meta.manage` (chủ, quản trị)
 - Trung tâm Meta (M17, đặc tả Phần 14): mỗi doanh nghiệp khai báo Meta App của mình (App ID; App Secret nằm trong Secret Vault, chỉ ghi tên). Đăng nhập bằng hộp thoại OAuth chính thức của Meta (`state` dùng một lần, 10 phút, gắn với người và tenant), đổi sang token dài hạn khoảng 60 ngày. Không dùng cookie, mật khẩu hay trình duyệt giả lập

@@ -101,6 +101,11 @@ export class LocalFileStorage implements FileStorage {
     return { stream: createReadStream(path), size };
   }
 
+  /** Where a stored file is on disk, for streaming it to an upload. */
+  filePath(key: string): string {
+    return this.path(key);
+  }
+
   async remove(key: string): Promise<void> {
     await rm(this.path(key), { force: true });
   }

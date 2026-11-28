@@ -25,6 +25,7 @@ import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
 import { AiWriter } from './AiWriter';
+import { MetaPublish } from './MetaPublish';
 import { QaBadge, QaPanel } from './QaPanel';
 import { VoiceOver } from './VoiceOver';
 
@@ -559,6 +560,9 @@ function ItemsPage() {
             <Notice kind="error">Chưa duyệt được: {detail.approvalBlockers.join('; ')}.</Notice>
           )}
           {detail.qa && <QaPanel qa={detail.qa} />}
+          {(detail.status === 'approved' || detail.status === 'published') && (
+            <MetaPublish key={`${detail.id}:${detail.currentVersion}`} detail={detail} />
+          )}
           {detail.variantOf && (
             <p className="mb-3 text-sm">
               <span className="text-muted">Chuyển thể từ: </span>

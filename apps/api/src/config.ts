@@ -41,6 +41,15 @@ const envSchema = z.object({
   // Meta Graph API and the Facebook sign-in page. Changed only for tests.
   META_GRAPH_URL: z.string().url().default('https://graph.facebook.com'),
   META_DIALOG_URL: z.string().url().default('https://www.facebook.com'),
+  META_GRAPH_VIDEO_URL: z.string().url().default('https://graph-video.facebook.com'),
+  META_UPLOAD_URL: z.string().url().default('https://rupload.facebook.com'),
+  // Publishes scheduled Meta posts from this process (spec Part 14).
+  META_PUBLISHER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  // The market's time zone: per-day post limits and publishing slots follow it.
+  META_TIMEZONE: z.string().min(1).default('Asia/Ho_Chi_Minh'),
   META_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
   NODE_ENV: z.string().default('development'),
 });

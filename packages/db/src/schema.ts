@@ -1084,3 +1084,34 @@ export const apiCalls = integration.table('api_calls', {
   calledBy: uuid('called_by'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+export const metaPosts = meta.table('posts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  version: integer('version').notNull(),
+  assetId: uuid('asset_id').notNull(),
+  format: text('format')
+    .$type<'feed' | 'photo' | 'video' | 'reel' | 'ig_image' | 'ig_reel'>()
+    .notNull(),
+  caption: text('caption'),
+  link: text('link'),
+  scheduledAt: ts('scheduled_at').notNull(),
+  localDay: text('local_day').notNull(),
+  status: text('status')
+    .$type<'scheduled' | 'publishing' | 'processing' | 'published' | 'failed' | 'cancelled'>()
+    .notNull()
+    .default('scheduled'),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: ts('next_attempt_at').notNull(),
+  lockedUntil: ts('locked_until'),
+  stage: jsonb('stage').$type<Record<string, string | number | boolean>>().notNull().default({}),
+  externalId: text('external_id'),
+  permalink: text('permalink'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  publishedAt: ts('published_at'),
+});
