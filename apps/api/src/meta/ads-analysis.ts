@@ -197,7 +197,7 @@ export interface AccountForAlerts {
   currency: string | null;
   today: string;
   campaigns: CampaignForAlerts[];
-  /** Disapproved ads, by campaign. */
+  /** Refused ads of campaigns that are on; grouped into one alert per campaign. */
   disapproved: { campaignId: string | null; campaignName: string | null; adName: string }[];
 }
 
@@ -223,16 +223,36 @@ export function alertsFor(a: AccountForAlerts): AdAlert[] {
       campaignId: null,
       campaignName: null,
     });
-  for (const d of a.disapproved)
+  // One line per campaign, however many of its ads were refused.
+  const refused = new Map<
+    string,
+    { campaignId: string | null; campaignName: string | null; ads: string[] }
+  >();
+  for (const d of a.disapproved) {
+    const key = d.campaignId ?? '';
+    const g = refused.get(key) ?? {
+      campaignId: d.campaignId,
+      campaignName: d.campaignName,
+      ads: [],
+    };
+    if (!g.ads.includes(d.adName)) g.ads.push(d.adName);
+    refused.set(key, g);
+  }
+  for (const g of refused.values()) {
+    const shown = g.ads
+      .slice(0, 5)
+      .map((n) => `“${n}”`)
+      .join(', ');
+    const more = g.ads.length > 5 ? ` và ${g.ads.length - 5} quảng cáo khác` : '';
     out.push({
       ...base,
       level: 'critical',
       code: 'AD_DISAPPROVED',
-      message: `Quảng cáo “${d.adName}” bị Meta từ chối. Sửa theo chính sách rồi gửi lại trong Trình quản lý quảng cáo; MARIS không tự gửi lại`,
-      campaignId: d.campaignId,
-      campaignName: d.campaignName,
+      message: `${g.ads.length > 1 ? `${g.ads.length} quảng cáo` : 'Quảng cáo'} ${shown}${more}${g.campaignName ? ` trong “${g.campaignName}”` : ''} bị Meta từ chối. Sửa theo chính sách rồi gửi lại trong Trình quản lý quảng cáo; MARIS không tự gửi lại`,
+      campaignId: g.campaignId,
+      campaignName: g.campaignName,
     });
-
+  }
   for (const c of a.campaigns) {
     const last = c.days.slice(-14);
     const today = last.find((d) => d.day === a.today)?.f ?? null;

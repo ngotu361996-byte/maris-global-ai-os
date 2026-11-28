@@ -149,6 +149,7 @@ export default function AdsPage() {
   const [days, setDays] = useState<number>(7);
   const [accountId, setAccountId] = useState('');
   const [summary, setSummary] = useState<AdsSummaryResponse | null>(null);
+  const [allAccounts, setAllAccounts] = useState<AdsSummaryResponse['accounts']>([]);
   const [list, setList] = useState<AdObjectResponse[]>([]);
   const [changes, setChanges] = useState<AdChangeResponse[]>([]);
   const [open, setOpen] = useState<string | null>(null);
@@ -163,7 +164,17 @@ export default function AdsPage() {
   const load = useCallback(() => {
     const p = new URLSearchParams({ days: String(days) });
     if (accountId) p.set('accountId', accountId);
-    api<AdsSummaryResponse>(`/ads/summary?${p}`).then(setSummary).catch(fail);
+    api<AdsSummaryResponse>(`/ads/summary?${p}`)
+      .then((r) => {
+        setSummary(r);
+        if (!accountId) setAllAccounts(r.accounts);
+      })
+      .catch(fail);
+    // The account list keeps every account while one is chosen.
+    if (accountId)
+      api<AdsSummaryResponse>(`/ads/summary?days=${days}`)
+        .then((r) => setAllAccounts(r.accounts))
+        .catch(() => {});
     api<AdObjectResponse[]>(`/ads/campaigns?${p}`).then(setList).catch(fail);
     api<AdChangeResponse[]>('/ads/changes').then(setChanges).catch(fail);
   }, [days, accountId]);
@@ -367,7 +378,7 @@ export default function AdsPage() {
             aria-label="Tài khoản quảng cáo"
           >
             <option value="">Mọi tài khoản quảng cáo</option>
-            {summary?.accounts.map((a) => (
+            {allAccounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -579,12 +590,13 @@ export default function AdsPage() {
         <div className="rounded-lg border border-line bg-panel p-3 text-sm">
           <h2 className="mb-2 text-sm font-semibold">Tài khoản quảng cáo</h2>
           <ul className="divide-y divide-line">
-            {summary?.accounts.map((a) => (
+            {allAccounts.map((a) => (
               <li key={a.id} className="py-2">
                 <div className="flex justify-between gap-2">
                   <button
-                    className="text-left font-medium hover:underline"
-                    onClick={() => setAccountId(a.id)}
+                    className={`text-left font-medium hover:underline ${a.id === accountId ? 'text-accent' : ''}`}
+                    onClick={() => setAccountId(a.id === accountId ? '' : a.id)}
+                    aria-pressed={a.id === accountId}
                   >
                     {a.name}
                   </button>

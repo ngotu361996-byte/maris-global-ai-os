@@ -502,6 +502,7 @@ export class MetaAdsService implements OnModuleInit, OnModuleDestroy {
             ),
           );
         const campName = new Map(camps.map((c) => [c.id, c.name]));
+        const campStatus = new Map(camps.map((c) => [c.id, c.status]));
         const alertDays = daysBetween(from, until);
         alerts.push(
           ...alertsFor({
@@ -522,11 +523,15 @@ export class MetaAdsService implements OnModuleInit, OnModuleDestroy {
                 effectiveStatus: c.effectiveStatus,
                 days: alertDays.map((day) => ({ day, f: byCampaign.get(c.id)?.get(day) ?? ZERO })),
               })),
-            disapproved: disapproved.map((d) => ({
-              adName: d.name,
-              campaignId: d.campaignId,
-              campaignName: d.campaignId ? (campName.get(d.campaignId) ?? null) : null,
-            })),
+            // Only campaigns that are on, in an account that can run: the rest do not spend.
+            disapproved: disapproved
+              .filter((d) => a.accountStatus === null || a.accountStatus === 1)
+              .filter((d) => !!d.campaignId && campStatus.get(d.campaignId) === 'ACTIVE')
+              .map((d) => ({
+                adName: d.name,
+                campaignId: d.campaignId,
+                campaignName: d.campaignId ? (campName.get(d.campaignId) ?? null) : null,
+              })),
           }),
         );
         const live = camps.filter((c) => c.present);
