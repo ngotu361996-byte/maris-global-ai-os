@@ -17,7 +17,7 @@ export const CRM_STAGE_LABEL: Record<CrmStage, string> = {
   lost: 'Không mua',
 };
 
-export const CRM_SOURCES = ['manual', 'lead_ads', ...META_CHANNELS] as const;
+export const CRM_SOURCES = ['manual', 'lead_ads', ...META_CHANNELS, 'shopify', 'poscake'] as const;
 export type CrmSource = (typeof CRM_SOURCES)[number];
 export const CRM_SOURCE_LABEL: Record<CrmSource, string> = {
   manual: 'Nhập tay',
@@ -26,10 +26,20 @@ export const CRM_SOURCE_LABEL: Record<CrmSource, string> = {
   ig_dm: 'Tin nhắn Instagram',
   fb_comment: 'Bình luận Facebook',
   ig_comment: 'Bình luận Instagram',
+  shopify: 'Đơn Shopify',
+  poscake: 'Đơn POSCake',
 };
 
 export type CrmActivityKind =
-  'created' | 'note' | 'stage' | 'owner' | 'lead' | 'thread' | 'updated' | 'archived';
+  | 'created'
+  | 'note'
+  | 'stage'
+  | 'owner'
+  | 'lead'
+  | 'thread'
+  | 'updated'
+  | 'archived'
+  | 'order';
 
 const phone = z
   .string()
