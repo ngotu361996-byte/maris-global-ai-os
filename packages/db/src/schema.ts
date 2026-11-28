@@ -1081,7 +1081,7 @@ export const metaAssets = meta.table('assets', {
 export const apiCalls = integration.table('api_calls', {
   id: uuid('id').primaryKey(),
   tenantId: uuid('tenant_id').notNull(),
-  provider: text('provider').$type<'meta' | 'google'>().notNull(),
+  provider: text('provider').$type<'meta' | 'google' | 'tiktok'>().notNull(),
   apiGroup: text('api_group').notNull(),
   method: text('method').$type<'GET' | 'POST' | 'PUT' | 'DELETE'>().notNull(),
   path: text('path').notNull(),
@@ -1095,6 +1095,8 @@ export const apiCalls = integration.table('api_calls', {
   // Sprint 26: Google quota units, and the YouTube channel a call was for.
   units: integer('units').notNull().default(0),
   googleChannelId: uuid('google_channel_id'),
+  // Sprint 27: the TikTok account a call was for.
+  tiktokAccountId: uuid('tiktok_account_id'),
   calledBy: uuid('called_by'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
@@ -1411,4 +1413,108 @@ export const youtubeUploads = google.table('youtube_uploads', {
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   publishedAt: ts('published_at'),
+});
+
+// Phase 8 (Sprint 27): TikTok Center.
+export const tiktok = pgSchema('tiktok');
+
+export const tiktokApps = tiktok.table('apps', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  clientKey: text('client_key').notNull(),
+  clientSecretName: text('client_secret_name').notNull(),
+  audited: boolean('audited').notNull().default(false),
+  updatedBy: uuid('updated_by').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export interface TiktokCreatorInfo {
+  nickname: string | null;
+  username: string | null;
+  privacyOptions: string[];
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
+  maxDurationSec: number | null;
+  checkedAt: string;
+}
+
+export const tiktokAccounts = tiktok.table('accounts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  openId: text('open_id').notNull(),
+  displayName: text('display_name').notNull(),
+  username: text('username'),
+  avatarUrl: text('avatar_url'),
+  refreshTokenSealed: text('refresh_token_sealed'),
+  refreshExpiresAt: ts('refresh_expires_at'),
+  scopes: text('scopes').array().notNull().default([]),
+  status: text('status').$type<'active' | 'invalid' | 'removed'>().notNull().default('active'),
+  checkError: text('check_error'),
+  enabled: boolean('enabled').notNull().default(true),
+  followers: bigint('followers', { mode: 'number' }),
+  following: bigint('following', { mode: 'number' }),
+  likes: bigint('likes', { mode: 'number' }),
+  videoCount: bigint('video_count', { mode: 'number' }),
+  creator: jsonb('creator').$type<TiktokCreatorInfo>(),
+  connectedBy: uuid('connected_by').notNull(),
+  connectedAt: ts('connected_at').notNull().defaultNow(),
+  syncedAt: ts('synced_at'),
+  removedAt: ts('removed_at'),
+});
+
+export const tiktokPosts = tiktok.table('posts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  version: integer('version').notNull(),
+  accountId: uuid('account_id').notNull(),
+  mode: text('mode').$type<'direct' | 'draft'>().notNull(),
+  title: text('title').notNull().default(''),
+  privacy: text('privacy').$type<
+    'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
+  >(),
+  allowComment: boolean('allow_comment').notNull().default(false),
+  allowDuet: boolean('allow_duet').notNull().default(false),
+  allowStitch: boolean('allow_stitch').notNull().default(false),
+  brandOrganic: boolean('brand_organic').notNull().default(false),
+  brandedContent: boolean('branded_content').notNull().default(false),
+  aigc: boolean('aigc').notNull().default(false),
+  coverMs: integer('cover_ms').notNull().default(0),
+  scheduledAt: ts('scheduled_at').notNull(),
+  status: text('status')
+    .$type<
+      'scheduled' | 'uploading' | 'processing' | 'published' | 'in_inbox' | 'failed' | 'cancelled'
+    >()
+    .notNull()
+    .default('scheduled'),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: ts('next_attempt_at').notNull(),
+  lockedUntil: ts('locked_until'),
+  stage: jsonb('stage').$type<Record<string, string | number | boolean>>().notNull().default({}),
+  publishId: text('publish_id'),
+  postId: text('post_id'),
+  warnings: text('warnings').array().notNull().default([]),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  publishedAt: ts('published_at'),
+});
+
+export const tiktokVideos = tiktok.table('videos', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  accountId: uuid('account_id').notNull(),
+  videoId: text('video_id').notNull(),
+  title: text('title').notNull().default(''),
+  coverUrl: text('cover_url'),
+  shareUrl: text('share_url'),
+  postedAt: ts('posted_at'),
+  durationSec: integer('duration_sec'),
+  views: bigint('views', { mode: 'number' }),
+  likes: bigint('likes', { mode: 'number' }),
+  comments: bigint('comments', { mode: 'number' }),
+  shares: bigint('shares', { mode: 'number' }),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
 });

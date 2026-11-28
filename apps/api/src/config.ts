@@ -69,6 +69,15 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  // TikTok sign-in and API hosts (spec Part 17). Changed only for tests.
+  TIKTOK_AUTH_URL: z.string().url().default('https://www.tiktok.com'),
+  TIKTOK_API_URL: z.string().url().default('https://open.tiktokapis.com'),
+  TIKTOK_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
+  // Posts approved videos to TikTok from this process.
+  TIKTOK_PUBLISHER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   NODE_ENV: z.string().default('development'),
 });
 

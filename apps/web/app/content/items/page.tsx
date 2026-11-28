@@ -28,6 +28,7 @@ import { AiWriter } from './AiWriter';
 import { MetaPublish } from './MetaPublish';
 import { QaBadge, QaPanel } from './QaPanel';
 import { VoiceOver } from './VoiceOver';
+import { TiktokPublish } from './TiktokPublish';
 import { YoutubePublish } from './YoutubePublish';
 
 const STATUS_CLS: Record<ItemStatus, string> = {
@@ -565,6 +566,7 @@ function ItemsPage() {
             <>
               <MetaPublish key={`${detail.id}:${detail.currentVersion}`} detail={detail} />
               <YoutubePublish key={`yt:${detail.id}:${detail.currentVersion}`} detail={detail} />
+              <TiktokPublish key={`tt:${detail.id}:${detail.currentVersion}`} detail={detail} />
             </>
           )}
           {detail.variantOf && (

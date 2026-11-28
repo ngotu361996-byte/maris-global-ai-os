@@ -25,3 +25,4 @@ export * from './meta';
 export * from './crm';
 export * from './ads';
 export * from './google';
+export * from './tiktok';

@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 26)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 27)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -11,7 +11,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
 | 7. Meta Platform | Xong: Sprint 21–25 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
-| 8. Multi-Platform | Đang làm: Sprint 26 (Google, YouTube). Kế hoạch: S27 TikTok, S28 Shopify và POSCake, S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
+| 8. Multi-Platform | Sprint 26 (Google, YouTube) đã merge. Đang làm: Sprint 27 (TikTok). Kế hoạch: S28 Shopify và POSCake, S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
 | 9–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -133,7 +133,20 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 26 – Trung tâm Google và YouTube (Giai đoạn 8)
+## Sprint 27 – Trung tâm TikTok (Giai đoạn 8)
+
+- Migration `0027`: schema `tiktok` với `apps` (Client key, tên secret của Client secret, cờ TikTok đã duyệt Direct Post), `accounts` (tài khoản TikTok, refresh token niêm phong, số liệu, thông tin người đăng `creator`), `posts` (bài đăng), `videos` (video của tài khoản và số liệu); `integration.api_calls` thêm nhà cung cấp `tiktok` và cột `tiktok_account_id`. Quyền `tiktok.read`, `tiktok.publish` (chủ, quản trị, quản lý), `tiktok.manage` (chủ, quản trị)
+- Kết nối TikTok (đặc tả Phần 17, M19): mỗi doanh nghiệp dùng ứng dụng TikTok for Developers của mình (nền tảng Desktop, nên Redirect URI `http://localhost:3000/tiktok/callback` hợp lệ); Client secret nằm trong Secret Vault. Đăng nhập qua trang Login Kit của TikTok với `state` dùng một lần (10 phút) và PKCE (thách thức SHA-256 dạng hex theo TikTok), xin quyền theo dịch vụ: đăng thẳng (`video.publish`), gửi vào hộp nháp (`video.upload`), số liệu (`user.info.profile`, `user.info.stats`, `video.list`). Chức năng chỉ “sẵn sàng” với quyền TikTok thật sự cấp. Tối đa 10 tài khoản. Refresh token (365 ngày) mã hóa AES-256-GCM; TikTok đổi refresh token khi làm mới thì MARIS lưu token mới. Ngắt kết nối báo TikTok thu hồi
+- Cổng gọi TikTok: mọi lượt gọi ghi vào nhật ký, không có token hay mã; địa chỉ tải lên của TikTok không nhận token. TikTok báo giới hạn tốc độ thì dừng tài khoản đó 1 phút; báo quá số bài trong ngày thì chờ 6 giờ; token hỏng thì lấy mã mới một lần, refresh token bị từ chối thì đánh dấu cần kết nối lại. Mã bài đăng 64 bit đọc dạng chữ để không bị làm tròn
+- Đăng video (Content Posting API): chỉ thành phẩm video đã duyệt (MP4, MOV, WebM; từ 3 giây; tối đa 4 GB). Hai cách: Đăng thẳng lên trang cá nhân, hoặc Gửi vào hộp nháp để viết chú thích và đăng trong app TikTok. Form theo Hướng dẫn chia sẻ nội dung của TikTok: tên người đăng, “Ai được xem” lấy từ lựa chọn TikTok cho tài khoản và không chọn sẵn, Bình luận/Duet/Stitch tắt mặc định và khóa khi tài khoản đã tắt, khai báo nội dung thương mại (Thương hiệu của bạn, Nội dung có thương hiệu; hợp tác trả phí không để Chỉ mình tôi), khai báo nội dung AI, câu đồng ý Xác nhận sử dụng âm nhạc cạnh nút đăng
+- Ứng dụng chưa được TikTok duyệt: đăng thẳng chỉ ở chế độ Chỉ mình tôi (MARIS chặn lựa chọn khác và nói rõ); muốn công khai ngay thì gửi vào hộp nháp
+- Bộ đăng chạy mỗi 30 giây: hỏi lại TikTok điều người đăng được phép ngay trước khi đăng, mở bài (`publish_id`), gửi tệp theo phần (tệp tới 64 MB một phần, lớn hơn chia phần 10 MB), lưu số phần đã gửi nên mất kết nối thì gửi tiếp phần sau, không tạo bài thứ hai. Địa chỉ tải lên hết hạn thì hỏi TikTok trạng thái rồi mới bắt đầu lại. Chờ TikTok xử lý tới 60 phút; TikTok báo lỗi thì hiện lý do bằng tiếng Việt, Thử lại mở bài mới. Bài công khai có đường dẫn thì đánh dấu thành phẩm đã đăng
+- Hẹn giờ: TikTok không có hẹn giờ qua API nên MARIS giữ bài và gửi đúng giờ (tối đa 30 ngày tới; máy chạy MARIS cần bật). Quá 24 giờ sau giờ hẹn mà chưa gửi được thì dừng và chờ người bấm Thử lại. MARIS gửi tối đa 15 bài mỗi tài khoản trong 24 giờ
+- Số liệu: đọc hồ sơ (người theo dõi, lượt thích, số video) và tối đa 60 video gần nhất của mỗi tài khoản với lượt xem, thích, bình luận, chia sẻ; báo cáo 30 ngày với tỷ lệ tương tác và video nổi bật
+- Web: trang `/tiktok` (Trung tâm TikTok: ứng dụng, tài khoản, bài đăng, số liệu, lượt gọi), `/tiktok/callback`; khung “Đăng lên TikTok” trong chi tiết thành phẩm video; mục M19 TikTok trên thanh bên
+- Giới hạn: chưa đăng ảnh (photo post), chưa đọc hay trả lời bình luận TikTok, chưa có TikTok Shop; TikTok Ads ở Sprint 30
+
+## Sprint 26 – Trung tâm Google và YouTube (Giai đoạn 8, đã merge)
 
 - Migration `0026`: schema `google` với `apps` (OAuth client: Client ID, tên secret của Client secret, hạn mức YouTube mỗi ngày, cờ YouTube đã xét duyệt dự án), `connections` (tài khoản Google, refresh token niêm phong), `channels` (kênh YouTube), `youtube_uploads` (lượt tải lên); `integration.api_calls` thêm nhà cung cấp `google`, phương thức `PUT`, cột `units` (đơn vị hạn mức) và `google_channel_id`. Quyền `google.read`, `google.publish` (chủ, quản trị, quản lý), `google.manage` (chủ, quản trị)
 - Kết nối Google (đặc tả Phần 16, M18): mỗi doanh nghiệp dùng dự án Google Cloud của mình; Client secret nằm trong Secret Vault. Đăng nhập qua màn hình đồng ý của Google với `state` dùng một lần (10 phút) và PKCE S256, xin quyền theo từng dịch vụ (hiện có YouTube: xem kênh, tải video). Chức năng chỉ “sẵn sàng” khi Google thật sự cấp quyền. Tối đa 10 tài khoản Google (mỗi kênh thương hiệu một lần đăng nhập). Refresh token mã hóa AES-256-GCM, không về trình duyệt; mã truy cập chỉ giữ trong bộ nhớ. Ngắt kết nối báo Google thu hồi token
