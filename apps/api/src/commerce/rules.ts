@@ -134,6 +134,21 @@ export interface GraphqlError {
   extensions?: { code?: string };
 }
 
+/**
+ * The scopes a Shopify token carries. Shopify lists `write_x` without the `read_x` it
+ * includes, so add those back.
+ */
+export function grantedScopes(raw: string | undefined): string[] {
+  const out = new Set(
+    (raw ?? '')
+      .split(/[,\s]+/)
+      .map((x) => x.trim())
+      .filter(Boolean),
+  );
+  for (const x of [...out]) if (x.startsWith('write_')) out.add(`read_${x.slice(6)}`);
+  return [...out].sort();
+}
+
 /** The first GraphQL error that stops the whole answer (throttling, access). */
 export function graphqlProblem(
   errors: GraphqlError[] | undefined,

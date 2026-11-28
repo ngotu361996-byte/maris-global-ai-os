@@ -142,6 +142,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 - Sửa giá và tồn kho trên Shopify: MARIS đọc lại giá thật trước khi ghi; tồn kho dùng so sánh với số cũ (`changeFromQuantity`) và khóa chống lặp, nên khi ai đó vừa đổi trên Shopify thì MARIS báo xung đột, cập nhật số mới và không ghi đè. Mọi lần sửa ghi lịch sử và audit
 - So sánh SKU giữa các cửa hàng (giá, tồn), nút lấy giá của cửa hàng khác; báo cáo doanh thu theo ngày, SKU bán chạy, SKU sắp hết hàng
 - Web: trang `/shopify` và `/poscake` (cửa hàng, hướng dẫn kết nối, báo cáo, sản phẩm và tồn kho, so sánh SKU, đơn hàng, lịch sử sửa, lượt gọi); mục M22, M26 trên thanh bên
+- Sau khi chạy thật: quyền ghi (`write_products`, `write_inventory`) tính cả quyền đọc tương ứng vì Shopify không liệt kê lại; Shopify báo thiếu quyền thì MARIS lấy mã mới (tối đa 5 phút một lần mỗi cửa hàng) để nhận quyền vừa duyệt mà không cần khởi động lại API
 - Giới hạn: chưa tạo hay xóa sản phẩm, chưa xử lý đơn (xác nhận, giao, hoàn), chưa nhận webhook; chưa ghi lên POSCake
 
 ## Sprint 27 – Trung tâm TikTok (Giai đoạn 8, đã merge)
