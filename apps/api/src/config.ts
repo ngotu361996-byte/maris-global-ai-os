@@ -55,6 +55,8 @@ const envSchema = z.object({
   PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
   // Reads new comments and messages every this many minutes while the webhook is quiet; 0 = off.
   META_INBOX_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
+  // Reads new Lead Ads leads of each Page every this many minutes (slower while the webhook works); 0 = off.
+  META_LEADS_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
   NODE_ENV: z.string().default('development'),
 });
 

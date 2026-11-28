@@ -20,12 +20,21 @@ export interface Inbound {
   authorName: string | null;
 }
 
+/** A Lead Ads lead named by the "leadgen" webhook: the answers themselves are read from Meta. */
+export interface LeadRef {
+  pageId: string;
+  leadgenId: string;
+  formId: string | null;
+}
+
 /** One change in a webhook delivery, with the key that makes it count once. */
 export interface WebhookChange {
   key: string;
   object: string;
   field: string;
   inbound: Inbound | null;
+  /** A new Lead Ads lead: MARIS reads its answers from Meta (Sprint 24). */
+  lead: LeadRef | null;
   /** Why it was not taken, when it was not. */
   skipped: string | null;
 }
@@ -138,17 +147,30 @@ function igComment(igId: string, v: Obj): Inbound | string {
   };
 }
 
+/** A Page "leadgen" change: someone sent a Lead Ads form. Only ids; no answers come with it. */
+function leadgen(pageId: string, v: Obj): LeadRef | string {
+  const leadgenId = str(v.leadgen_id);
+  if (!leadgenId || !/^[0-9]{1,30}$/.test(leadgenId)) return 'thiếu mã lead';
+  const formId = str(v.form_id);
+  return {
+    pageId: str(v.page_id) ?? pageId,
+    leadgenId,
+    formId: formId && /^[0-9]{1,30}$/.test(formId) ? formId : null,
+  };
+}
+
 /** Splits a webhook delivery from Meta into its changes. Unknown shapes are kept as skipped. */
 export function parseWebhook(body: unknown): WebhookChange[] {
   const root = obj(body);
   const object = clip(str(root.object) ?? 'unknown', 40);
   const out: WebhookChange[] = [];
-  const push = (field: string, raw: unknown, r: Inbound | string) =>
+  const push = (field: string, raw: unknown, r: Inbound | LeadRef | string) =>
     out.push({
       key: sha(`${object}:${field}:${JSON.stringify(raw)}`),
       object,
       field: clip(field, 40),
-      inbound: typeof r === 'string' ? null : r,
+      inbound: typeof r === 'string' || 'leadgenId' in r ? null : r,
+      lead: typeof r !== 'string' && 'leadgenId' in r ? r : null,
       skipped: typeof r === 'string' ? clip(r, 300) : null,
     });
   for (const e of arr(root.entry).slice(0, 100)) {
@@ -164,6 +186,7 @@ export function parseWebhook(body: unknown): WebhookChange[] {
       if (object === 'page' && field === 'feed') push(field, ch, feedComment(accountId, value));
       else if (object === 'instagram' && field === 'comments')
         push(field, ch, igComment(accountId, value));
+      else if (object === 'page' && field === 'leadgen') push(field, ch, leadgen(accountId, value));
       else push(field, ch, `MARIS chưa dùng sự kiện ${object}/${field}`);
     }
   }

@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 23)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 24)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -10,7 +10,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7. Meta Platform | Sprint 21–22 (kết nối Meta, API Governor, xuất bản) đã merge; Sprint 23 (hộp thư bình luận và tin nhắn) đang review; kế tiếp: 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
+| 7. Meta Platform | Sprint 21–23 (kết nối Meta, API Governor, xuất bản, hộp thư) đã merge; Sprint 24 (CRM và Lead Ads) đang review; kế tiếp: 25 quảng cáo, chi tiêu và nghiệm thu |
 | 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -132,7 +132,17 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 23 – Hộp thư bình luận và tin nhắn (Giai đoạn 7)
+## Sprint 24 – CRM và Lead Ads (Giai đoạn 7)
+
+- Migration `0024`: schema `crm` với `contacts` (khách hàng) và `activities` (lịch sử chăm sóc, chỉ thêm, không sửa); `meta.lead_forms`, `meta.leads`; cột `meta.threads.contact_id`, `meta.assets.leads_synced_at`. Quyền `crm.read`, `crm.manage` (cả 4 vai trò). Meta App xin thêm quyền `pages_manage_ads` (cùng `leads_retrieval`) để đọc biểu mẫu
+- Khách hàng (M25, đặc tả Phần 20): tên, số điện thoại, email, nguồn (Lead Ads, Messenger, tin nhắn Instagram, bình luận, nhập tay), giai đoạn Mới → Đã liên hệ → Có nhu cầu → Đã mua / Không mua (kèm lý do), người phụ trách, nhãn, giá trị dự kiến, ghi chú. Mỗi số điện thoại (chuẩn hóa `+84 912…` = `0912…`) hoặc email chỉ thuộc một khách đang mở; nhập trùng bị từ chối và chỉ ra khách đã có. Lưu trữ thay vì xóa
+- Lead Ads: nhận lead qua webhook `leadgen` (đăng ký cùng nút “Bật webhook cho các Page”) và tự đọc dự phòng mỗi `META_LEADS_POLL_MIN` phút (mặc định 15, thưa gấp 4 khi webhook đang chạy), mỗi lượt một Page, qua API Governor. Mỗi lead lưu một lần; lead cùng số điện thoại hoặc email ghép vào cùng khách hàng, còn thiếu email hay số thì bổ sung. Bật/tắt nhận lead từng biểu mẫu; nút “Đọc lead ngay”
+- Hộp thư: nút “Lưu vào CRM” tạo khách hàng từ hội thoại (giữ người đang nhận xử lý làm người phụ trách) hoặc gắn vào khách đã có; hội thoại hiện tên khách hàng CRM
+- Audit ghi mọi thay đổi nhưng không ghi tên, số điện thoại, email hay câu trả lời của khách
+- Web: trang `/crm` (CRM và bán hàng): ô đếm theo giai đoạn, danh sách lọc theo nguồn, người phụ trách, tìm theo tên, số, email, nhãn; chi tiết khách với lịch sử chăm sóc, hội thoại, lead; tab Lead Ads (biểu mẫu, danh sách lead và câu trả lời, cảnh báo thiếu quyền)
+- Giới hạn: chưa xuất hay nhập tệp Excel/CSV, chưa gộp hai khách hàng trùng có sẵn, chưa tự giao lead cho nhân viên, chưa gửi lead sang Shopify/POSCake (Giai đoạn 8); chưa đọc quảng cáo và chi tiêu (Sprint 25)
+
+## Sprint 23 – Hộp thư bình luận và tin nhắn (Giai đoạn 7, đã merge)
 
 - Migration `0023`: `meta.threads` (hội thoại), `meta.messages` (mã Meta duy nhất mỗi tenant, chống trùng), `meta.webhook_events` (mỗi sự kiện một lần, không lưu nội dung), cột webhook của `meta.apps`, `ai.provider_calls.meta_thread_id`. Quyền `inbox.read`, `inbox.reply` (cả 4 vai trò)
 - Webhook Meta (đặc tả Phần 15 “Webhook First”, Phần 26 kiểm tra chữ ký): `GET/POST /api/v1/meta/webhook/:tenantId`, xác minh bằng mã riêng của tenant, mỗi lần gửi kiểm `X-Hub-Signature-256` bằng App Secret trên đúng byte nhận được. Nhận Messenger, tin nhắn Instagram, bình luận Page (feed) và Instagram (comments); echo của chính Page được ghi là tin của cửa hàng
