@@ -78,6 +78,17 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  // Shopify and POSCake (spec Part 18). The Shopify Admin API version MARIS speaks.
+  SHOPIFY_API_VERSION: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .default('2026-10'),
+  // Sends Shopify calls here instead of https://<store>.myshopify.com. Only for tests.
+  SHOPIFY_ORIGIN: z.string().url().optional(),
+  POSCAKE_API_URL: z.string().url().default('https://pos.pages.fm/api/v1'),
+  COMMERCE_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
+  // Minutes between automatic reads of connected stores; 0 reads only on request.
+  COMMERCE_SYNC_MIN: z.coerce.number().int().min(0).max(1440).default(15),
   NODE_ENV: z.string().default('development'),
 });
 

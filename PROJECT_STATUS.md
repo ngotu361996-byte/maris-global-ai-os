@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 27)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 28)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -11,7 +11,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
 | 7. Meta Platform | Xong: Sprint 21–25 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
-| 8. Multi-Platform | Sprint 26 (Google, YouTube) đã merge. Đang làm: Sprint 27 (TikTok). Kế hoạch: S28 Shopify và POSCake, S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
+| 8. Multi-Platform | Sprint 26 (Google, YouTube), 27 (TikTok) đã merge. Đang làm: Sprint 28 (Shopify và POSCake). Kế hoạch: S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
 | 9–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -133,7 +133,18 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 27 – Trung tâm TikTok (Giai đoạn 8)
+## Sprint 28 – Shopify và POSCake (Giai đoạn 8)
+
+- Migration `0028`: schema `commerce` với `stores` (cửa hàng Shopify hoặc POSCake, tên secret, quyền đã cấp, mốc đọc đơn), `locations` (kho, chi nhánh), `products`, `variants` (SKU, giá, tồn), `stock` (tồn theo kho), `orders` (đơn hàng, trạng thái chung), `changes` (lịch sử sửa giá và tồn, chỉ thêm); `integration.api_calls` thêm nhà cung cấp `shopify`, `poscake` và cột `commerce_store_id`; nguồn liên hệ CRM thêm `shopify`, `poscake`, hoạt động CRM thêm `order`. Quyền `commerce.read` (chủ, quản trị, quản lý), `commerce.manage`, `commerce.write` (chủ, quản trị)
+- Kết nối Shopify (M22): doanh nghiệp tạo ứng dụng trong Dev Dashboard của cửa hàng và cài lên cửa hàng; MARIS lấy mã truy cập bằng Client ID và Client secret (trong Secret Vault), mã 24 giờ, tự lấy lại khi hết hạn. Báo rõ khi ứng dụng chưa cài, sai secret, hoặc ứng dụng khác tổ chức với cửa hàng. Admin GraphQL `2026-10`, chờ khi Shopify báo hết điểm truy vấn, dừng cửa hàng khi bị chặn tốc độ
+- Kết nối POSCake (M26): API key của cửa hàng (Cấu hình → Nâng cao → Kết nối bên thứ 3) trong Secret Vault và mã cửa hàng; chỉ đọc (API ghi của POSCake chưa được kiểm chứng)
+- Đồng bộ mỗi 15 phút (và nút Đồng bộ): kho, sản phẩm, SKU, tồn theo kho, đơn hàng mới hoặc vừa đổi (lần đầu 60 ngày). Trạng thái đơn quy về 6 trạng thái chung. Người mua có số điện thoại hoặc email được ghép hoặc tạo liên hệ CRM, đơn mới ghi hoạt động “Đơn hàng”. Tối đa 10 cửa hàng, 20.000 SKU mỗi cửa hàng
+- Sửa giá và tồn kho trên Shopify: MARIS đọc lại giá thật trước khi ghi; tồn kho dùng so sánh với số cũ (`changeFromQuantity`) và khóa chống lặp, nên khi ai đó vừa đổi trên Shopify thì MARIS báo xung đột, cập nhật số mới và không ghi đè. Mọi lần sửa ghi lịch sử và audit
+- So sánh SKU giữa các cửa hàng (giá, tồn), nút lấy giá của cửa hàng khác; báo cáo doanh thu theo ngày, SKU bán chạy, SKU sắp hết hàng
+- Web: trang `/shopify` và `/poscake` (cửa hàng, hướng dẫn kết nối, báo cáo, sản phẩm và tồn kho, so sánh SKU, đơn hàng, lịch sử sửa, lượt gọi); mục M22, M26 trên thanh bên
+- Giới hạn: chưa tạo hay xóa sản phẩm, chưa xử lý đơn (xác nhận, giao, hoàn), chưa nhận webhook; chưa ghi lên POSCake
+
+## Sprint 27 – Trung tâm TikTok (Giai đoạn 8, đã merge)
 
 - Migration `0027`: schema `tiktok` với `apps` (Client key, tên secret của Client secret, cờ TikTok đã duyệt Direct Post), `accounts` (tài khoản TikTok, refresh token niêm phong, số liệu, thông tin người đăng `creator`), `posts` (bài đăng), `videos` (video của tài khoản và số liệu); `integration.api_calls` thêm nhà cung cấp `tiktok` và cột `tiktok_account_id`. Quyền `tiktok.read`, `tiktok.publish` (chủ, quản trị, quản lý), `tiktok.manage` (chủ, quản trị)
 - Kết nối TikTok (đặc tả Phần 17, M19): mỗi doanh nghiệp dùng ứng dụng TikTok for Developers của mình (nền tảng Desktop, nên Redirect URI `http://localhost:3000/tiktok/callback` hợp lệ); Client secret nằm trong Secret Vault. Đăng nhập qua trang Login Kit của TikTok với `state` dùng một lần (10 phút) và PKCE (thách thức SHA-256 dạng hex theo TikTok), xin quyền theo dịch vụ: đăng thẳng (`video.publish`), gửi vào hộp nháp (`video.upload`), số liệu (`user.info.profile`, `user.info.stats`, `video.list`). Chức năng chỉ “sẵn sàng” với quyền TikTok thật sự cấp. Tối đa 10 tài khoản. Refresh token (365 ngày) mã hóa AES-256-GCM; TikTok đổi refresh token khi làm mới thì MARIS lưu token mới. Ngắt kết nối báo TikTok thu hồi

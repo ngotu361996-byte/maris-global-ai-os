@@ -1081,7 +1081,9 @@ export const metaAssets = meta.table('assets', {
 export const apiCalls = integration.table('api_calls', {
   id: uuid('id').primaryKey(),
   tenantId: uuid('tenant_id').notNull(),
-  provider: text('provider').$type<'meta' | 'google' | 'tiktok'>().notNull(),
+  provider: text('provider')
+    .$type<'meta' | 'google' | 'tiktok' | 'shopify' | 'poscake'>()
+    .notNull(),
   apiGroup: text('api_group').notNull(),
   method: text('method').$type<'GET' | 'POST' | 'PUT' | 'DELETE'>().notNull(),
   path: text('path').notNull(),
@@ -1097,6 +1099,8 @@ export const apiCalls = integration.table('api_calls', {
   googleChannelId: uuid('google_channel_id'),
   // Sprint 27: the TikTok account a call was for.
   tiktokAccountId: uuid('tiktok_account_id'),
+  // Sprint 28: the Shopify or POSCake store a call was for.
+  commerceStoreId: uuid('commerce_store_id'),
   calledBy: uuid('called_by'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
@@ -1229,7 +1233,7 @@ export const metaLeads = meta.table('leads', {
 export const crm = pgSchema('crm');
 
 export type CrmStage = 'new' | 'contacted' | 'qualified' | 'won' | 'lost';
-export type CrmSource = 'manual' | 'lead_ads' | MetaChannel;
+export type CrmSource = 'manual' | 'lead_ads' | MetaChannel | 'shopify' | 'poscake';
 
 export const crmContacts = crm.table('contacts', {
   id: uuid('id').primaryKey(),
@@ -1258,7 +1262,9 @@ export const crmActivities = crm.table('activities', {
   tenantId: uuid('tenant_id').notNull(),
   contactId: uuid('contact_id').notNull(),
   kind: text('kind')
-    .$type<'created' | 'note' | 'stage' | 'owner' | 'lead' | 'thread' | 'updated' | 'archived'>()
+    .$type<
+      'created' | 'note' | 'stage' | 'owner' | 'lead' | 'thread' | 'updated' | 'archived' | 'order'
+    >()
     .notNull(),
   body: text('body').notNull().default(''),
   data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
@@ -1517,4 +1523,132 @@ export const tiktokVideos = tiktok.table('videos', {
   comments: bigint('comments', { mode: 'number' }),
   shares: bigint('shares', { mode: 'number' }),
   syncedAt: ts('synced_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------- Shopify and POSCake (Sprint 28)
+
+export const commerce = pgSchema('commerce');
+
+export type CommercePlatform = 'shopify' | 'poscake';
+export type CommerceOrderState =
+  | 'new'
+  | 'confirmed'
+  | 'shipping'
+  | 'completed'
+  | 'returned'
+  | 'cancelled';
+
+export const commerceStores = commerce.table('stores', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  platform: text('platform').$type<CommercePlatform>().notNull(),
+  externalId: text('external_id').notNull(),
+  name: text('name').notNull(),
+  clientId: text('client_id'),
+  secretName: text('secret_name').notNull(),
+  currency: text('currency').notNull().default('VND'),
+  scopes: text('scopes').array().notNull().default([]),
+  status: text('status').$type<'active' | 'invalid' | 'removed'>().notNull().default('active'),
+  checkError: text('check_error'),
+  enabled: boolean('enabled').notNull().default(true),
+  ordersCursor: ts('orders_cursor'),
+  syncedAt: ts('synced_at'),
+  syncError: text('sync_error'),
+  connectedBy: uuid('connected_by').notNull(),
+  connectedAt: ts('connected_at').notNull().defaultNow(),
+  removedAt: ts('removed_at'),
+});
+
+export const commerceLocations = commerce.table('locations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  storeId: uuid('store_id').notNull(),
+  externalId: text('external_id').notNull(),
+  name: text('name').notNull(),
+  active: boolean('active').notNull().default(true),
+});
+
+export const commerceProducts = commerce.table('products', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  storeId: uuid('store_id').notNull(),
+  externalId: text('external_id').notNull(),
+  title: text('title').notNull(),
+  status: text('status').notNull(),
+  productType: text('product_type'),
+  vendor: text('vendor'),
+  present: boolean('present').notNull().default(true),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+});
+
+// numeric columns come back as strings.
+export const commerceVariants = commerce.table('variants', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  storeId: uuid('store_id').notNull(),
+  productId: uuid('product_id').notNull(),
+  externalId: text('external_id').notNull(),
+  title: text('title').notNull(),
+  sku: text('sku'),
+  skuNorm: text('sku_norm'),
+  barcode: text('barcode'),
+  price: numeric('price', { precision: 16, scale: 2 }).notNull(),
+  compareAt: numeric('compare_at', { precision: 16, scale: 2 }),
+  inventoryItemId: text('inventory_item_id'),
+  available: integer('available'),
+  present: boolean('present').notNull().default(true),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+});
+
+export const commerceStock = commerce.table(
+  'stock',
+  {
+    tenantId: uuid('tenant_id').notNull(),
+    variantId: uuid('variant_id').notNull(),
+    locationId: uuid('location_id').notNull(),
+    available: integer('available').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.variantId, t.locationId] })],
+);
+
+export interface CommerceOrderItem {
+  sku: string | null;
+  title: string;
+  quantity: number;
+  price: number;
+}
+
+export const commerceOrders = commerce.table('orders', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  storeId: uuid('store_id').notNull(),
+  externalId: text('external_id').notNull(),
+  number: text('number').notNull(),
+  state: text('state').$type<CommerceOrderState>().notNull(),
+  rawStatus: text('raw_status').notNull(),
+  total: numeric('total', { precision: 16, scale: 2 }).notNull().default('0'),
+  currency: text('currency').notNull(),
+  customerName: text('customer_name'),
+  phone: text('phone'),
+  email: text('email'),
+  contactId: uuid('contact_id'),
+  items: jsonb('items').$type<CommerceOrderItem[]>().notNull().default([]),
+  placedAt: ts('placed_at').notNull(),
+  updatedExt: ts('updated_ext').notNull(),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+});
+
+export const commerceChanges = commerce.table('changes', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  storeId: uuid('store_id').notNull(),
+  variantId: uuid('variant_id').notNull(),
+  kind: text('kind').$type<'price' | 'stock'>().notNull(),
+  locationId: uuid('location_id'),
+  oldValue: numeric('old_value', { precision: 16, scale: 2 }).notNull(),
+  newValue: numeric('new_value', { precision: 16, scale: 2 }).notNull(),
+  outcome: text('outcome').$type<'done' | 'failed' | 'conflict'>().notNull(),
+  error: text('error'),
+  requestedBy: uuid('requested_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
 });

@@ -51,6 +51,7 @@ const KIND_LABEL: Record<string, string> = {
   thread: 'Hội thoại',
   updated: 'Sửa thông tin',
   archived: 'Lưu trữ',
+  order: 'Đơn hàng',
 };
 const FIELD_LABEL: Record<string, string> = {
   name: 'tên',

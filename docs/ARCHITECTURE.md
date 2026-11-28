@@ -239,7 +239,23 @@ khi kiểm thử.
 (số phần đã gửi lưu trong `stage.next` sau mỗi phần), rồi `status/fetch` mỗi 30 giây tới `PUBLISH_COMPLETE` hoặc
 `SEND_TO_USER_INBOX`. `TIKTOK_PUBLISHER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `tiktok`, `maris_ctx` (hàm ngữ cảnh).
+## Thương mại: Shopify và POSCake (Giai đoạn 8)
+
+`apps/api/src/commerce` (Sprint 28). `CommerceService` giữ cửa hàng (`commerce.stores`, duy nhất theo nền tảng và
+`external_id` khi chưa gỡ), kho, sản phẩm, SKU, tồn theo kho, đơn và lịch sử sửa (`commerce.changes`, chỉ SELECT/INSERT).
+Mọi lượt gọi đi qua `CommerceApiService`: Shopify lấy mã bằng client credentials (`/admin/oauth/access_token`, giữ trong bộ
+nhớ tới gần hết hạn, 401 thì lấy mã mới một lần), gọi Admin GraphQL theo `SHOPIFY_API_VERSION`; lỗi `THROTTLED` chờ theo
+`throttleStatus` và thử lại tối đa 3 lần, HTTP 429 dừng cửa hàng ở `commerce:block:<tenant>:<store>`. POSCake gửi `api_key`
+qua tham số truy vấn (nhật ký bỏ key), 401/403 đánh dấu cửa hàng `invalid`. Luật đọc lỗi, tiền và trạng thái đơn ở `rules.ts`.
+
+`CommerceSyncService` chạy mỗi `COMMERCE_SYNC_MIN` phút bằng `withSystem('commerce_sync')`, mỗi cửa hàng một lượt đọc
+cùng lúc. Đơn đọc theo `orders_cursor` (Shopify: `updated_at` mới nhất; POSCake: thời điểm bắt đầu đọc). Người mua ghép CRM
+qua `crm/contacts-core` (`lockContacts`, `matchOrCreate`). Ghi giá: đọc lại giá thật, lệch thì ghi `conflict` và trả 409 `COMMERCE_CONFLICT`.
+Ghi tồn: `inventorySetQuantities` với `changeFromQuantity` và `@idempotent(key: <id dòng changes>)`;
+`CHANGE_FROM_QUANTITY_STALE` là xung đột. Dòng lịch sử, cập nhật cục bộ và audit nằm trong một transaction.
+`SHOPIFY_ORIGIN`, `POSCAKE_API_URL` chỉ đổi khi kiểm thử.
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `tiktok`, `commerce`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 
