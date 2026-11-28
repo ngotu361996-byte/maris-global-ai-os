@@ -170,6 +170,14 @@ cột `stage`, nên lần chạy lại tiếp từ bước dở. Lệnh ghi khô
 (`graph`, `graph-video`) hoặc gửi nguyên tệp lên `rupload` (`META_GRAPH_VIDEO_URL`, `META_UPLOAD_URL`).
 `META_PUBLISHER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
 
+Hộp thư (Sprint 23): `MetaInboxService`. Webhook công khai `meta/webhook/:tenantId` không có phiên đăng nhập; Nest giữ
+`rawBody` để kiểm `X-Hub-Signature-256` bằng App Secret. `inbox-events.ts` chuyển webhook và kết quả đọc
+(`conversations`, `feed`, `media`) về cùng một dạng `Inbound`; `ingest` ghi tin theo mã Meta duy nhất (`ON CONFLICT DO
+NOTHING`), nên webhook, đọc dự phòng và echo không tạo bản trùng. Vòng đọc dự phòng dùng `withSystem('meta_inbox')` chỉ để
+liệt kê kết nối đang hoạt động, rồi đọc dưới ngữ cảnh tenant. Trả lời theo ba bước: ghi `sending` trong transaction có khóa
+tư vấn (giữ 400/ngày), gọi Meta, rồi ghi `sent`, `failed` hoặc `unknown`. Gợi ý AI gọi `AiRouterService` trực tiếp, đồng bộ,
+qua Cost Governor và Dừng khẩn cấp, ghi `ai.provider_calls.meta_thread_id`.
+
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.

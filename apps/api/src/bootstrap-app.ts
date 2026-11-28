@@ -6,7 +6,11 @@ import { ApiErrorFilter } from './common/errors.filter';
 import type { AppConfig } from './config';
 
 export async function createApp(config: AppConfig): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule.register(config), { logger: ['error', 'warn', 'log'] });
+  const app = await NestFactory.create(AppModule.register(config), {
+    logger: ['error', 'warn', 'log'],
+    // Meta signs its webhook over the exact bytes it sent (spec Part 26, signature verification).
+    rawBody: true,
+  });
   app.use(helmet());
   app.enableCors({
     origin: config.WEB_ORIGIN,

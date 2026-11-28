@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 22)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 23)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -10,7 +10,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7. Meta Platform | Sprint 21 (kết nối Meta và API Governor) đã merge; Sprint 22 (xuất bản lên Page và Instagram) đang review; kế tiếp: 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
+| 7. Meta Platform | Sprint 21–22 (kết nối Meta, API Governor, xuất bản) đã merge; Sprint 23 (hộp thư bình luận và tin nhắn) đang review; kế tiếp: 23 webhook và hộp thư, 24 CRM và Lead Ads, 25 quảng cáo và nghiệm thu |
 | 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -132,7 +132,18 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 22 – Xuất bản lên Page và Instagram (Giai đoạn 7)
+## Sprint 23 – Hộp thư bình luận và tin nhắn (Giai đoạn 7)
+
+- Migration `0023`: `meta.threads` (hội thoại), `meta.messages` (mã Meta duy nhất mỗi tenant, chống trùng), `meta.webhook_events` (mỗi sự kiện một lần, không lưu nội dung), cột webhook của `meta.apps`, `ai.provider_calls.meta_thread_id`. Quyền `inbox.read`, `inbox.reply` (cả 4 vai trò)
+- Webhook Meta (đặc tả Phần 15 “Webhook First”, Phần 26 kiểm tra chữ ký): `GET/POST /api/v1/meta/webhook/:tenantId`, xác minh bằng mã riêng của tenant, mỗi lần gửi kiểm `X-Hub-Signature-256` bằng App Secret trên đúng byte nhận được. Nhận Messenger, tin nhắn Instagram, bình luận Page (feed) và Instagram (comments); echo của chính Page được ghi là tin của cửa hàng
+- Đọc dự phòng khi webhook im lặng quá 1 giờ (máy không có địa chỉ công khai): mỗi phút xoay vòng 2 Page/tài khoản mỗi tenant, mỗi tài khoản cách nhau `META_INBOX_POLL_MIN` phút (mặc định 15), qua API Governor nhóm `sync` ưu tiên nền. Nút “Đọc tin mới ngay” và “Bật webhook cho các Page” (`subscribed_apps`)
+- Trả lời dưới tên Page qua API Governor nhóm `reply`: Messenger/Instagram chỉ trong 24 giờ sau tin cuối của khách (`messaging_type=RESPONSE`), bình luận trả lời ngay dưới bình luận gốc. Tối đa 400 lượt/ngày/tenant theo giờ thị trường; một lần bấm gửi một lần (`clientKey`); Meta từ chối thì không tính, mất kết nối thì tính và đánh dấu “không rõ”, không tự gửi lại
+- AI gợi ý trả lời bằng AI Provider của tenant (qua Cost Governor, Dừng khẩn cấp, ghi chi phí): chỉ dùng thông tin trong hội thoại, không bịa giá hay khuyến mãi, đề nghị chuyển nhân viên khi khiếu nại, hoàn tiền hoặc không chắc. AI không tự gửi
+- Phân công (Nhận xử lý), đánh dấu xong, tin mới tự mở lại; tên khách Messenger/Instagram hỏi Meta một lần (nhóm `lookup`, cache 1 ngày)
+- Web: trang `/inbox` Hộp thư khách hàng (M24); mục Lịch xuất bản (M16) trên thanh bên; khung đăng bài tự cập nhật trạng thái; hướng dẫn Meta App thêm bước “Native or desktop app = Không”
+- Giới hạn: chưa ẩn hoặc xóa bình luận, chưa gửi tệp đính kèm, chưa tự trả lời không cần người; CRM và Lead Ads ở Sprint 24
+
+## Sprint 22 – Xuất bản lên Page và Instagram (Giai đoạn 7, đã merge)
 
 - Migration `0022`: bảng `meta.posts` (lịch đăng, trạng thái, số lần thử, bước đã xong, mã bài trên Meta), RLS theo tenant và cho job hệ thống `meta_publisher`. Quyền `meta.publish` (chủ, quản trị, quản lý)
 - Chỉ đăng thành phẩm đã duyệt (hoặc đã xuất bản), kiểm định không lỗi, lên Page hoặc Instagram đang bật. Bài chữ thành bài viết trên Page; ảnh thành ảnh trên Page hoặc ảnh Instagram; video thành Reels (3–90 giây) hoặc video thường trên Page, Reels Instagram (3–900 giây). Kiểm tra cỡ tệp, thời lượng, chú thích Instagram (2.200 ký tự, 30 hashtag) trước khi xếp lịch

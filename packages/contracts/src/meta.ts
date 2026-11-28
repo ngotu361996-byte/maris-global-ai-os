@@ -333,3 +333,96 @@ export interface MetaPostResponse {
   createdAt: string;
   publishedAt: string | null;
 }
+
+// ---------------------------------------------------------------- Inbox (Sprint 23)
+
+export const META_CHANNELS = ['messenger', 'ig_dm', 'fb_comment', 'ig_comment'] as const;
+export type MetaChannel = (typeof META_CHANNELS)[number];
+export const META_CHANNEL_LABEL: Record<MetaChannel, string> = {
+  messenger: 'Messenger',
+  ig_dm: 'Tin nhắn Instagram',
+  fb_comment: 'Bình luận Facebook',
+  ig_comment: 'Bình luận Instagram',
+};
+/** Messenger and Instagram allow a business reply this long after the customer's last message. */
+export const META_REPLY_WINDOW_HOURS = 24;
+export const META_REPLY_MAX_CHARS = 2000;
+
+export const listInboxSchema = z.object({
+  status: z.enum(['open', 'done']).optional(),
+  channel: z.enum(META_CHANNELS).optional(),
+  assetId: z.uuid().optional(),
+  /** "me": assigned to the person asking; "none": not assigned. */
+  assigned: z.enum(['me', 'none']).optional(),
+  q: z.string().trim().max(100).optional(),
+});
+export type ListInbox = z.infer<typeof listInboxSchema>;
+
+export const replyInboxSchema = z.object({
+  text: z.string().trim().min(1).max(META_REPLY_MAX_CHARS),
+  /** A random id from the browser, so a double click sends once. */
+  clientKey: z.uuid(),
+  /** The text started from MARIS's AI suggestion. */
+  aiAssisted: z.boolean().default(false),
+});
+export type ReplyInbox = z.infer<typeof replyInboxSchema>;
+
+export const updateThreadSchema = z
+  .object({
+    status: z.enum(['open', 'done']).optional(),
+    assignedTo: z.uuid().nullable().optional(),
+  })
+  .refine((v) => v.status !== undefined || v.assignedTo !== undefined, {
+    message: 'Không có gì để đổi',
+  });
+export type UpdateThread = z.infer<typeof updateThreadSchema>;
+
+export interface InboxThreadResponse {
+  id: string;
+  channel: MetaChannel;
+  assetId: string;
+  assetName: string;
+  customerName: string;
+  status: 'open' | 'done';
+  assignedTo: string | null;
+  assignedToName: string | null;
+  unread: number;
+  snippet: string;
+  lastMessageAt: string;
+  /** Messenger and Instagram: until when a reply is still allowed; null for comments. */
+  replyUntil: string | null;
+}
+
+export interface InboxMessageResponse {
+  id: string;
+  direction: 'in' | 'out';
+  authorName: string;
+  body: string;
+  attachments: { type: string; url: string | null }[];
+  status: 'received' | 'sending' | 'sent' | 'failed' | 'unknown';
+  sentAt: string;
+  sentByName: string | null;
+  aiAssisted: boolean;
+  errorMessage: string | null;
+}
+
+export interface InboxThreadDetail extends InboxThreadResponse {
+  postId: string | null;
+  messages: InboxMessageResponse[];
+  suggestion: { text: string; handoff: boolean; reason: string | null; at: string } | null;
+}
+
+export interface InboxSummaryResponse {
+  open: number;
+  unread: number;
+  repliesToday: number;
+  replyLimit: number;
+  webhook: {
+    callbackUrl: string;
+    verifyToken: string | null;
+    lastEventAt: string | null;
+  };
+  /** Minutes between reads when the webhook is quiet; 0 when reading is off. */
+  pollMinutes: number;
+  lastPolledAt: string | null;
+}
