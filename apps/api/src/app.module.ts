@@ -21,6 +21,7 @@ import { DevicesModule } from './devices/devices.module';
 import { ContentModule } from './content/content.module';
 import { MetaModule } from './meta/meta.module';
 import { CrmModule } from './crm/crm.module';
+import { GoogleModule } from './google/google.module';
 
 @Module({})
 export class AppModule {
@@ -28,7 +29,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule, ContentModule, MetaModule, CrmModule],
+      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule, ContentModule, MetaModule, CrmModule, GoogleModule],
       controllers: [HealthController, TenantsController, RolesController],
       providers: [{ provide: APP_CONFIG, useValue: config }, { provide: APP_GUARD, useClass: RateLimitGuard }],
       exports: [APP_CONFIG],

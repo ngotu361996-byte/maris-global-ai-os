@@ -199,7 +199,28 @@ Thay đổi: ghi `meta.ad_changes` + audit trong một transaction; không cần
 `POST /{id}` nhóm `ads_manage` (tạm dừng ưu tiên `essential`), rồi ghi `applied`/`failed` + audit. Vượt `meta.assets.ads_daily_cap`
 thì chờ người có `ads.approve`.
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `maris_ctx` (hàm ngữ cảnh).
+## Trung tâm Google và YouTube (Giai đoạn 8)
+
+`apps/api/src/google` (Sprint 26, đặc tả Phần 16–17). `GoogleService` giữ OAuth client của tenant (`google.apps`), các
+tài khoản Google (`google.connections`, nhiều tài khoản mỗi tenant, duy nhất theo `google_sub`) và kênh YouTube
+(`google.channels`). Đăng nhập dùng `state` một lần trong Redis (`google:oauth:<sha256>`, GETDEL) kèm PKCE; quyền đã cấp
+lấy từ `scope` Google trả về, chức năng tính từ đó. Refresh token niêm phong bằng `sealFor('google-refresh', …)`.
+
+Mọi lượt gọi Google đi qua `GoogleApiService.call`: lấy mã truy cập từ bộ nhớ hoặc đổi refresh token (`/token`), kiểm tra
+lệnh dừng (`google:block:<tenant>:youtube`) và hạn mức YouTube tính bằng tổng `integration.api_calls.units` từ nửa đêm
+giờ Thái Bình Dương (luật thuần trong `quota.ts`, dùng lại ngưỡng của `meta/governor.ts`), rồi ghi lượt gọi (chỉ đường
+dẫn). 401 thì lấy mã mới một lần; `invalid_grant` đánh dấu kết nối `invalid`. `GOOGLE_ACCOUNTS_URL`, `GOOGLE_OAUTH_URL`,
+`GOOGLE_API_URL` chỉ đổi khi kiểm thử.
+
+Tải lên YouTube: `YoutubePublishService` xếp lượt vào `google.youtube_uploads` trong transaction có khóa tư vấn theo tenant
+(giữ hạn mức ngày), vòng lặp 30 giây nhận lượt đến hạn bằng `withSystem('youtube_uploader')` và `FOR UPDATE SKIP LOCKED`,
+rồi chạy dưới ngữ cảnh tenant của người yêu cầu. Resumable upload: `POST …/videos?uploadType=resumable` mở phiên (địa chỉ
+phiên phải cùng origin với `GOOGLE_API_URL`, niêm phong vào `stage`), `PUT` gửi tệp; lần chạy lại hỏi `Content-Range:
+bytes */<size>` (308 + `Range` = số byte đã nhận) và gửi tiếp, nên không có trạng thái “không rõ”. Hẹn giờ dùng
+`status.publishAt` của YouTube. Quy tắc tiêu đề, mô tả, thẻ, Shorts, cảnh báo nằm ở `youtube-rules.ts`.
+`YOUTUBE_UPLOADER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

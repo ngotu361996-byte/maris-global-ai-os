@@ -1081,9 +1081,9 @@ export const metaAssets = meta.table('assets', {
 export const apiCalls = integration.table('api_calls', {
   id: uuid('id').primaryKey(),
   tenantId: uuid('tenant_id').notNull(),
-  provider: text('provider').$type<'meta'>().notNull(),
+  provider: text('provider').$type<'meta' | 'google'>().notNull(),
   apiGroup: text('api_group').notNull(),
-  method: text('method').$type<'GET' | 'POST' | 'DELETE'>().notNull(),
+  method: text('method').$type<'GET' | 'POST' | 'PUT' | 'DELETE'>().notNull(),
   path: text('path').notNull(),
   assetId: uuid('asset_id'),
   outcome: text('outcome').$type<'ok' | 'failed' | 'refused'>().notNull(),
@@ -1092,6 +1092,9 @@ export const apiCalls = integration.table('api_calls', {
   errorMessage: text('error_message'),
   durationMs: integer('duration_ms'),
   usage: jsonb('usage').$type<Record<string, unknown>>(),
+  // Sprint 26: Google quota units, and the YouTube channel a call was for.
+  units: integer('units').notNull().default(0),
+  googleChannelId: uuid('google_channel_id'),
   calledBy: uuid('called_by'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
@@ -1326,4 +1329,86 @@ export const metaAdChanges = meta.table('ad_changes', {
   createdAt: ts('created_at').notNull().defaultNow(),
   decidedAt: ts('decided_at'),
   appliedAt: ts('applied_at'),
+});
+
+// Phase 8 (Sprint 26): Google Center and YouTube Center.
+export const google = pgSchema('google');
+
+export const googleApps = google.table('apps', {
+  tenantId: uuid('tenant_id').primaryKey(),
+  clientId: text('client_id').notNull(),
+  clientSecretName: text('client_secret_name').notNull(),
+  youtubeQuota: integer('youtube_quota').notNull().default(10000),
+  youtubeAudited: boolean('youtube_audited').notNull().default(false),
+  updatedBy: uuid('updated_by').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const googleConnections = google.table('connections', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  googleSub: text('google_sub').notNull(),
+  email: text('email').notNull(),
+  name: text('name').notNull(),
+  refreshTokenSealed: text('refresh_token_sealed'),
+  scopes: text('scopes').array().notNull().default([]),
+  status: text('status').$type<'active' | 'invalid' | 'removed'>().notNull().default('active'),
+  checkError: text('check_error'),
+  connectedBy: uuid('connected_by').notNull(),
+  connectedAt: ts('connected_at').notNull().defaultNow(),
+  syncedAt: ts('synced_at'),
+  removedAt: ts('removed_at'),
+});
+
+export const googleChannels = google.table('channels', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  connectionId: uuid('connection_id').notNull(),
+  channelId: text('channel_id').notNull(),
+  title: text('title').notNull(),
+  customUrl: text('custom_url'),
+  thumbnailUrl: text('thumbnail_url'),
+  subscribers: bigint('subscribers', { mode: 'number' }),
+  videos: bigint('videos', { mode: 'number' }),
+  views: bigint('views', { mode: 'number' }),
+  longUploads: text('long_uploads'),
+  enabled: boolean('enabled').notNull().default(false),
+  syncedAt: ts('synced_at').notNull().defaultNow(),
+  removedAt: ts('removed_at'),
+});
+
+export const youtubeUploads = google.table('youtube_uploads', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  version: integer('version').notNull(),
+  channelId: uuid('channel_id').notNull(),
+  format: text('format').$type<'video' | 'short'>().notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  tags: text('tags').array().notNull().default([]),
+  categoryId: text('category_id').notNull(),
+  privacy: text('privacy').$type<'public' | 'unlisted' | 'private'>().notNull(),
+  publishAt: ts('publish_at'),
+  madeForKids: boolean('made_for_kids').notNull(),
+  syntheticMedia: boolean('synthetic_media').notNull().default(false),
+  thumbnailItemId: uuid('thumbnail_item_id'),
+  thumbnailVersion: integer('thumbnail_version'),
+  status: text('status')
+    .$type<'scheduled' | 'uploading' | 'processing' | 'published' | 'failed' | 'cancelled'>()
+    .notNull()
+    .default('scheduled'),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: ts('next_attempt_at').notNull(),
+  lockedUntil: ts('locked_until'),
+  stage: jsonb('stage').$type<Record<string, string | number | boolean>>().notNull().default({}),
+  videoId: text('video_id'),
+  youtubePrivacy: text('youtube_privacy'),
+  warnings: text('warnings').array().notNull().default([]),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  publishedAt: ts('published_at'),
 });

@@ -237,6 +237,8 @@ export interface ApiCallResponse {
   errorCode: string | null;
   errorMessage: string | null;
   durationMs: number | null;
+  /** Google: quota units the call counted for. */
+  units?: number | null;
   calledByName: string | null;
   createdAt: string;
 }

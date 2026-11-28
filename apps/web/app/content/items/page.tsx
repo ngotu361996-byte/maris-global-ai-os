@@ -28,6 +28,7 @@ import { AiWriter } from './AiWriter';
 import { MetaPublish } from './MetaPublish';
 import { QaBadge, QaPanel } from './QaPanel';
 import { VoiceOver } from './VoiceOver';
+import { YoutubePublish } from './YoutubePublish';
 
 const STATUS_CLS: Record<ItemStatus, string> = {
   draft: 'border-line text-muted',
@@ -561,7 +562,10 @@ function ItemsPage() {
           )}
           {detail.qa && <QaPanel qa={detail.qa} />}
           {(detail.status === 'approved' || detail.status === 'published') && (
-            <MetaPublish key={`${detail.id}:${detail.currentVersion}`} detail={detail} />
+            <>
+              <MetaPublish key={`${detail.id}:${detail.currentVersion}`} detail={detail} />
+              <YoutubePublish key={`yt:${detail.id}:${detail.currentVersion}`} detail={detail} />
+            </>
           )}
           {detail.variantOf && (
             <p className="mb-3 text-sm">
