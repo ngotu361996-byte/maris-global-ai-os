@@ -473,6 +473,9 @@ describe('Sprint 26 (e2e): Google Center and YouTube uploads', () => {
       features: [
         { key: 'youtube_read', ready: true },
         { key: 'youtube_upload', ready: true },
+        // Asked for YouTube only: the website services stay off.
+        { key: 'analytics_read', ready: false },
+        { key: 'search_console_read', ready: false },
       ],
     });
     expect(s.channels.map((c: { channelId: string }) => c.channelId).sort()).toEqual([CH1, CH2]);

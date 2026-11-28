@@ -40,12 +40,12 @@ export type GoogleAuth =
 
 export interface GoogleRequest {
   /** What the call is for; YouTube calls count against the YouTube quota. */
-  service: 'youtube' | 'oauth' | 'account';
+  service: 'youtube' | 'oauth' | 'account' | 'analytics' | 'search_console';
   /** The quota cost of a YouTube call, from Google's table. */
   call?: YoutubeCall;
   priority: ApiPriority;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  host: 'api' | 'oauth';
+  host: 'api' | 'oauth' | 'analytics_data' | 'analytics_admin' | 'search_console';
   /** Starting with "/"; logged without the query string. */
   path: string;
   params?: Record<string, string | number | boolean>;
@@ -175,7 +175,7 @@ export class GoogleApiService {
         durationMs,
       });
 
-      if (kind === 'token' && req.auth.kind === 'connection' && !refreshed && req.host === 'api') {
+      if (kind === 'token' && req.auth.kind === 'connection' && !refreshed && req.host !== 'oauth') {
         // The access token may have been revoked or expired early: get a new one, once.
         this.tokens.delete(req.auth.connectionId);
         refreshed = true;
@@ -396,13 +396,26 @@ export class GoogleApiService {
     );
   }
 
+  private hostUrl(host: GoogleRequest['host']): string {
+    switch (host) {
+      case 'oauth':
+        return this.config.GOOGLE_OAUTH_URL;
+      case 'analytics_data':
+        return this.config.GOOGLE_ANALYTICS_DATA_URL;
+      case 'analytics_admin':
+        return this.config.GOOGLE_ANALYTICS_ADMIN_URL;
+      case 'search_console':
+        return this.config.GOOGLE_SEARCH_CONSOLE_URL;
+      default:
+        return this.config.GOOGLE_API_URL;
+    }
+  }
+
   private async fetch(req: GoogleRequest, token: string | null): Promise<Response> {
     const strip = (u: string) => u.replace(/\/$/, '');
     const url = req.sessionUrl
       ? new URL(req.sessionUrl)
-      : new URL(
-          `${strip(req.host === 'oauth' ? this.config.GOOGLE_OAUTH_URL : this.config.GOOGLE_API_URL)}${req.path}`,
-        );
+      : new URL(`${strip(this.hostUrl(req.host))}${req.path}`);
     if (req.params)
       for (const [k, v] of Object.entries(req.params)) url.searchParams.set(k, String(v));
     const headers: Record<string, string> = { Accept: 'application/json', ...(req.headers ?? {}) };

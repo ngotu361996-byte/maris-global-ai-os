@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 28)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 29)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -11,7 +11,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
 | 7. Meta Platform | Xong: Sprint 21–25 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
-| 8. Multi-Platform | Sprint 26 (Google, YouTube), 27 (TikTok) đã merge. Đang làm: Sprint 28 (Shopify và POSCake). Kế hoạch: S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
+| 8. Multi-Platform | Sprint 26 (Google, YouTube), 27 (TikTok), 28 (Shopify, POSCake) đã merge. Đang làm: Sprint 29 (Website, GA4 và Search Console). Kế hoạch: S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
 | 9–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -133,7 +133,17 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (S
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 28 – Shopify và POSCake (Giai đoạn 8)
+## Sprint 29 – Website, GA4 và Search Console (Giai đoạn 8)
+
+- Migration `0029`: schema `web` với `sites` (website, liên kết thuộc tính GA4 và Search Console qua một kết nối Google, sitemap Google báo), `ga4_daily`, `gsc_daily` (số liệu theo ngày), `tops` (trang, nguồn, từ khóa, trang trên Google của 28 ngày), `checks` và `check_issues` (kết quả kiểm tra website). Quyền `web.read` (chủ, quản trị, quản lý), `web.manage` (chủ, quản trị)
+- Trung tâm Google thêm hai dịch vụ chỉ đọc: Google Analytics 4 (`analytics.readonly`) và Search Console (`webmasters.readonly`); kết nối lại để cấp thêm quyền mà không mất quyền YouTube
+- Website và SEO (M21): thêm website (tối đa 20), chọn tài khoản Google, thuộc tính GA4 và thuộc tính Search Console từ danh sách Google trả về. MARIS đọc mỗi 6 giờ (và nút Đọc ngay) 180 ngày số liệu theo ngày: phiên, người dùng, người dùng mới, lượt xem, sự kiện chính, tỷ lệ tương tác; lượt nhấp, lượt hiển thị, CTR, vị trí trung bình; cùng trang xem nhiều, nguồn truy cập, từ khóa và trang trên Google của 28 ngày, và sitemap. Một nguồn lỗi không chặn nguồn kia, lỗi được ghi trên website
+- Báo cáo 7, 28 hoặc 90 ngày, so với cùng số ngày liền trước, biểu đồ theo ngày
+- Kiểm tra website: đọc trang chủ, `robots.txt`, sitemap và tối đa 25 trang nội bộ, thử tối đa 150 liên kết (HEAD, không được thì GET); báo trang lỗi, liên kết hỏng, chuyển hướng vòng, chưa HTTPS, trang chậm (trên 3 giây), thiếu hoặc quá dài title và meta description, thiếu hoặc nhiều H1, noindex, thiếu viewport, thiếu `lang`, ảnh thiếu alt, title trùng nhau, thiếu sitemap hoặc robots.txt. Chỉ đọc trang công khai: mọi địa chỉ và mọi lần chuyển hướng được kiểm, địa chỉ mạng nội bộ bị chặn (trừ khi bật `WEBSITE_ALLOW_PRIVATE_URLS`)
+- Web: trang `/website` (website, liên kết Google, số liệu, danh sách top, sitemap, kết quả kiểm tra); mục M21 trên thanh bên; trang `/google` hướng dẫn bật Google Analytics Data API, Analytics Admin API và Search Console API
+- Giới hạn: chỉ đọc, chưa gửi sitemap hay yêu cầu lập chỉ mục; chưa đo Core Web Vitals; kiểm tra website chạy theo yêu cầu, chưa chạy theo lịch
+
+## Sprint 28 – Shopify và POSCake (Giai đoạn 8, đã merge)
 
 - Migration `0028`: schema `commerce` với `stores` (cửa hàng Shopify hoặc POSCake, tên secret, quyền đã cấp, mốc đọc đơn), `locations` (kho, chi nhánh), `products`, `variants` (SKU, giá, tồn), `stock` (tồn theo kho), `orders` (đơn hàng, trạng thái chung), `changes` (lịch sử sửa giá và tồn, chỉ thêm); `integration.api_calls` thêm nhà cung cấp `shopify`, `poscake` và cột `commerce_store_id`; nguồn liên hệ CRM thêm `shopify`, `poscake`, hoạt động CRM thêm `order`. Quyền `commerce.read` (chủ, quản trị, quản lý), `commerce.manage`, `commerce.write` (chủ, quản trị)
 - Kết nối Shopify (M22): doanh nghiệp tạo ứng dụng trong Dev Dashboard của cửa hàng và cài lên cửa hàng; MARIS lấy mã truy cập bằng Client ID và Client secret (trong Secret Vault), mã 24 giờ, tự lấy lại khi hết hạn. Báo rõ khi ứng dụng chưa cài, sai secret, hoặc ứng dụng khác tổ chức với cửa hàng. Admin GraphQL `2026-10`, chờ khi Shopify báo hết điểm truy vấn, dừng cửa hàng khi bị chặn tốc độ

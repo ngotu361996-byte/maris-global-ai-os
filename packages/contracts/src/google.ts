@@ -27,6 +27,14 @@ export const GOOGLE_SERVICES = {
       'https://www.googleapis.com/auth/youtube.upload',
     ],
   },
+  analytics: {
+    label: 'Google Analytics 4',
+    scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+  },
+  search_console: {
+    label: 'Search Console',
+    scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+  },
 } as const;
 export type GoogleService = keyof typeof GOOGLE_SERVICES;
 export const GOOGLE_SERVICE_KEYS = Object.keys(GOOGLE_SERVICES) as [GoogleService];
@@ -42,7 +50,24 @@ export const GOOGLE_FEATURES = [
     label: 'Tải video và Shorts lên YouTube',
     scopes: ['https://www.googleapis.com/auth/youtube.upload'],
   },
+  {
+    key: 'analytics_read',
+    label: 'Xem số liệu Google Analytics 4',
+    scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+  },
+  {
+    key: 'search_console_read',
+    label: 'Xem số liệu Search Console',
+    scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+  },
 ] as const;
+
+/** What each Google service is for, shown next to its box when signing in. */
+export const GOOGLE_SERVICE_HINT: Record<GoogleService, string> = {
+  youtube: 'xem kênh, tải video',
+  analytics: 'chỉ đọc số liệu website',
+  search_console: 'chỉ đọc số liệu tìm kiếm',
+};
 
 /**
  * YouTube Data API quota: 10,000 units a day for a new Google Cloud project, counted from

@@ -103,6 +103,10 @@ export function googleErrorKind(status: number, body: unknown): GoogleErrorKind 
     )
   )
     return 'permission';
+  // Newer Google APIs (Analytics, Search Console) send a status name instead of reasons.
+  const statusName =
+    err && typeof err === 'object' ? String((err as { status?: unknown }).status ?? '') : '';
+  if (status === 403 && statusName === 'PERMISSION_DENIED') return 'permission';
   if (status === 429) return 'rate';
   if (status >= 500 || reasons.includes('backendError')) return 'transient';
   return 'other';
