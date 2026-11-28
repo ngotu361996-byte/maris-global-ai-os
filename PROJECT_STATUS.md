@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 24)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 25, nghiệm thu)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -10,7 +10,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7. Meta Platform | Sprint 21–23 (kết nối Meta, API Governor, xuất bản, hộp thư) đã merge; Sprint 24 (CRM và Lead Ads) đang review; kế tiếp: 25 quảng cáo, chi tiêu và nghiệm thu |
+| 7. Meta Platform | Sprint 21–24 đã merge; Sprint 25 (quảng cáo, chi tiêu) đang review. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
 | 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -132,7 +132,19 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 24 – CRM và Lead Ads (Giai đoạn 7)
+## Sprint 25 – Trung tâm quảng cáo và phân tích chi tiêu (Giai đoạn 7)
+
+- Migration `0025`: `meta.ad_objects` (chiến dịch, nhóm quảng cáo, quảng cáo), `meta.ad_insights` (số liệu theo ngày của từng chiến dịch), `meta.ad_changes` (mọi thay đổi gửi Meta, ai yêu cầu, ai duyệt); cột `ads_synced_at`, `ads_structure_at`, `ads_daily_cap`, `ads_error` của `meta.assets`. Quyền `ads.read`, `ads.manage` (chủ, quản trị, quản lý), `ads.approve` (chủ, quản trị)
+- Đọc quảng cáo (đặc tả Phần 14, 15): mỗi phút một tài khoản quảng cáo tới hạn, mỗi tài khoản `META_ADS_POLL_MIN` phút (mặc định 30) theo vòng quay, qua API Governor nhóm `ads_insights` ưu tiên nền. Chiến dịch, nhóm quảng cáo, quảng cáo đọc mỗi 3 giờ hoặc khi số liệu có chiến dịch mới; số liệu theo ngày lần đầu 30 ngày, sau đó 3 ngày gần nhất (Meta còn sửa số mấy ngày gần). Ngày tính theo múi giờ của tài khoản; ngân sách theo đơn vị của Meta (VND nguyên đồng, USD theo cent). Nút “Đọc Meta ngay”
+- Phân tích (đặc tả Phần 19, M23): chi tiêu, hiển thị, nhấp, CTR, CPC, CPM, kết quả (mua + lead + cuộc trò chuyện Messenger), CPA, giá trị mua và ROAS theo Meta báo cáo (ghi rõ không phải doanh thu thực nhận); một lượt mua Meta báo dưới nhiều tên chỉ tính một lần. Chọn 7, 14, 30 ngày, từng tài khoản; biểu đồ chi tiêu theo ngày; so sánh chiến dịch; chi tiết chiến dịch với nhóm quảng cáo và quảng cáo
+- Cảnh báo và gợi ý (chỉ báo, không tự sửa): tài khoản không hoạt động, quảng cáo bị Meta từ chối, chi tiêu hôm nay hơn 1,5 lần mức thường, CPA 3 ngày gần đây tăng hơn 1,5 lần, chi 7 ngày ≥ 50 lượt nhấp mà chưa có kết quả, CTR dưới 0,5%, chiến dịch bật mà không hiển thị
+- Quản lý (nhóm `ads_manage`, token người dùng): tạm dừng, bật lại, đổi ngân sách hằng ngày của chiến dịch hoặc nhóm quảng cáo. Tạm dừng và giảm ngân sách gửi ngay (tạm dừng ưu tiên thiết yếu). Giới hạn ngân sách hằng ngày mỗi tài khoản (`ads.approve`): tăng vượt giới hạn, hoặc bật lại mục có ngân sách vượt giới hạn, chờ duyệt; chưa đặt giới hạn thì mọi lần tăng và bật lại đều chờ duyệt. Người yêu cầu rút lại được; mỗi mục chỉ một thay đổi đang mở mỗi loại. Quảng cáo bị Meta từ chối không bật lại được từ MARIS. Meta từ chối thì ghi “Lỗi” kèm lý do, không thử lại
+- Audit: yêu cầu, duyệt, từ chối, rút, áp dụng, lỗi, đổi giới hạn
+- Web: trang `/ads` (M23 Trung tâm quảng cáo) trên thanh bên mục Bán hàng
+- Giới hạn: chưa tạo chiến dịch hay quảng cáo mới, chưa sửa đối tượng hay nội dung quảng cáo, chưa đổi ngân sách trọn đời; số liệu theo chiến dịch (chưa theo từng quảng cáo, độ tuổi, vị trí); chưa có Google Ads, TikTok Ads (Giai đoạn 8); chưa đối chiếu với doanh thu thật (Giai đoạn 9)
+- [Báo cáo nghiệm thu Giai đoạn 7](docs/phases/phase-7-meta-platform.md)
+
+## Sprint 24 – CRM và Lead Ads (Giai đoạn 7, đã merge)
 
 - Migration `0024`: schema `crm` với `contacts` (khách hàng) và `activities` (lịch sử chăm sóc, chỉ thêm, không sửa); `meta.lead_forms`, `meta.leads`; cột `meta.threads.contact_id`, `meta.assets.leads_synced_at`. Quyền `crm.read`, `crm.manage` (cả 4 vai trò). Meta App xin thêm quyền `pages_manage_ads` (cùng `leads_retrieval`) để đọc biểu mẫu
 - Khách hàng (M25, đặc tả Phần 20): tên, số điện thoại, email, nguồn (Lead Ads, Messenger, tin nhắn Instagram, bình luận, nhập tay), giai đoạn Mới → Đã liên hệ → Có nhu cầu → Đã mua / Không mua (kèm lý do), người phụ trách, nhãn, giá trị dự kiến, ghi chú. Mỗi số điện thoại (chuẩn hóa `+84 912…` = `0912…`) hoặc email chỉ thuộc một khách đang mở; nhập trùng bị từ chối và chỉ ra khách đã có. Lưu trữ thay vì xóa

@@ -57,6 +57,8 @@ const envSchema = z.object({
   META_INBOX_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
   // Reads new Lead Ads leads of each Page every this many minutes (slower while the webhook works); 0 = off.
   META_LEADS_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
+  // Reads campaigns and daily ad figures of each ad account every this many minutes (in turn); 0 = off.
+  META_ADS_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(30),
   NODE_ENV: z.string().default('development'),
 });
 
