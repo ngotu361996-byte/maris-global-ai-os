@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sprint 25, nghiệm thu)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (xong, chờ Giai đoạn 8)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -10,7 +10,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
-| 7. Meta Platform | Sprint 21–24 đã merge; Sprint 25 (quảng cáo, chi tiêu) đang review. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
+| 7. Meta Platform | Xong: Sprint 21–25 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
 | 8–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -132,7 +132,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 25 – Trung tâm quảng cáo và phân tích chi tiêu (Giai đoạn 7)
+## Sprint 25 – Trung tâm quảng cáo và phân tích chi tiêu (Giai đoạn 7, đã merge)
 
 - Migration `0025`: `meta.ad_objects` (chiến dịch, nhóm quảng cáo, quảng cáo), `meta.ad_insights` (số liệu theo ngày của từng chiến dịch), `meta.ad_changes` (mọi thay đổi gửi Meta, ai yêu cầu, ai duyệt); cột `ads_synced_at`, `ads_structure_at`, `ads_daily_cap`, `ads_error` của `meta.assets`. Quyền `ads.read`, `ads.manage` (chủ, quản trị, quản lý), `ads.approve` (chủ, quản trị)
 - Đọc quảng cáo (đặc tả Phần 14, 15): mỗi phút một tài khoản quảng cáo tới hạn, mỗi tài khoản `META_ADS_POLL_MIN` phút (mặc định 30) theo vòng quay, qua API Governor nhóm `ads_insights` ưu tiên nền. Chiến dịch, nhóm quảng cáo, quảng cáo đọc mỗi 3 giờ hoặc khi số liệu có chiến dịch mới; số liệu theo ngày lần đầu 30 ngày, sau đó 3 ngày gần nhất (Meta còn sửa số mấy ngày gần). Ngày tính theo múi giờ của tài khoản; ngân sách theo đơn vị của Meta (VND nguyên đồng, USD theo cent). Nút “Đọc Meta ngay”
@@ -142,6 +142,7 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (Sp
 - Audit: yêu cầu, duyệt, từ chối, rút, áp dụng, lỗi, đổi giới hạn
 - Web: trang `/ads` (M23 Trung tâm quảng cáo) trên thanh bên mục Bán hàng
 - Giới hạn: chưa tạo chiến dịch hay quảng cáo mới, chưa sửa đối tượng hay nội dung quảng cáo, chưa đổi ngân sách trọn đời; số liệu theo chiến dịch (chưa theo từng quảng cáo, độ tuổi, vị trí); chưa có Google Ads, TikTok Ads (Giai đoạn 8); chưa đối chiếu với doanh thu thật (Giai đoạn 9)
+- Sửa sau khi thử thật: cảnh báo “bị Meta từ chối” chỉ tính quảng cáo của chiến dịch đang bật trong tài khoản đang hoạt động, gộp một dòng mỗi chiến dịch; danh sách tài khoản giữ đủ khi đang chọn một tài khoản (bấm lại để bỏ chọn)
 - [Báo cáo nghiệm thu Giai đoạn 7](docs/phases/phase-7-meta-platform.md)
 
 ## Sprint 24 – CRM và Lead Ads (Giai đoạn 7, đã merge)

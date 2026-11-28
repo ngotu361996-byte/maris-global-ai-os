@@ -175,5 +175,21 @@ describe('Ads analysis rules', () => {
       disapproved: [],
     });
     expect(noResults.map((a) => a.code)).toEqual(['NO_RESULTS']);
+
+    const grouped = alertsFor({
+      id: 'acc',
+      name: 'TK',
+      accountStatus: 1,
+      currency: 'VND',
+      today: '2026-11-28',
+      campaigns: [],
+      disapproved: ['b1', 'b1', '2', '3'].map((adName) => ({
+        campaignId: 'c9',
+        campaignName: 'Áo',
+        adName,
+      })),
+    });
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]!.message).toContain('3 quảng cáo “b1”, “2”, “3” trong “Áo”');
   });
 });
