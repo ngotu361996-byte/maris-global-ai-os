@@ -50,7 +50,8 @@ export class DbService implements OnModuleDestroy {
       | 'meta_ads'
       | 'youtube_uploader'
       | 'tiktok_publisher'
-      | 'commerce_sync',
+      | 'commerce_sync'
+      | 'web_sync',
     fn: (tx: Tx) => Promise<T>,
   ): Promise<T> {
     return this.db.transaction(async (tx) => {

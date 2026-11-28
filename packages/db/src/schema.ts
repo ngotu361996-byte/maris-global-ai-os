@@ -1652,3 +1652,113 @@ export const commerceChanges = commerce.table('changes', {
   requestedBy: uuid('requested_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+// ------------------------------------------------------------------ web (Sprint 29, Part 16/18)
+
+export const web = pgSchema('web');
+
+export interface WebSitemap {
+  path: string;
+  lastSubmitted: string | null;
+  lastDownloaded: string | null;
+  isPending: boolean;
+  errors: number;
+  warnings: number;
+  submitted: number | null;
+  indexed: number | null;
+}
+
+export const webSites = web.table('sites', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  ga4Property: text('ga4_property'),
+  ga4Name: text('ga4_name'),
+  ga4ConnectionId: uuid('ga4_connection_id'),
+  gscSite: text('gsc_site'),
+  gscConnectionId: uuid('gsc_connection_id'),
+  gscSitemaps: jsonb('gsc_sitemaps').$type<WebSitemap[]>().notNull().default([]),
+  currency: text('currency'),
+  enabled: boolean('enabled').notNull().default(true),
+  syncedAt: ts('synced_at'),
+  syncError: text('sync_error'),
+  createdBy: uuid('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  removedAt: ts('removed_at'),
+});
+
+export const webGa4Daily = web.table(
+  'ga4_daily',
+  {
+    siteId: uuid('site_id').notNull(),
+    tenantId: uuid('tenant_id').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    sessions: integer('sessions').notNull(),
+    users: integer('users').notNull(),
+    newUsers: integer('new_users').notNull(),
+    views: integer('views').notNull(),
+    keyEvents: numeric('key_events', { precision: 14, scale: 2 }).notNull(),
+    engagementRate: numeric('engagement_rate', { precision: 6, scale: 4 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.siteId, t.day] })],
+);
+
+export const webGscDaily = web.table(
+  'gsc_daily',
+  {
+    siteId: uuid('site_id').notNull(),
+    tenantId: uuid('tenant_id').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    clicks: integer('clicks').notNull(),
+    impressions: integer('impressions').notNull(),
+    ctr: numeric('ctr', { precision: 7, scale: 6 }).notNull(),
+    position: numeric('position', { precision: 8, scale: 2 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.siteId, t.day] })],
+);
+
+export type WebTopKind = 'ga4_page' | 'ga4_channel' | 'gsc_query' | 'gsc_page';
+
+export const webTops = web.table(
+  'tops',
+  {
+    siteId: uuid('site_id').notNull(),
+    tenantId: uuid('tenant_id').notNull(),
+    kind: text('kind').$type<WebTopKind>().notNull(),
+    key: text('key').notNull(),
+    rank: integer('rank').notNull(),
+    a: numeric('a', { precision: 16, scale: 4 }).notNull().default('0'),
+    b: numeric('b', { precision: 16, scale: 4 }).notNull().default('0'),
+    c: numeric('c', { precision: 16, scale: 4 }).notNull().default('0'),
+    d: numeric('d', { precision: 16, scale: 4 }).notNull().default('0'),
+  },
+  (t) => [primaryKey({ columns: [t.siteId, t.kind, t.key] })],
+);
+
+export const webChecks = web.table('checks', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  siteId: uuid('site_id').notNull(),
+  status: text('status').$type<'running' | 'done' | 'failed'>().notNull(),
+  pages: integer('pages').notNull().default(0),
+  links: integer('links').notNull().default(0),
+  errors: integer('errors').notNull().default(0),
+  warnings: integer('warnings').notNull().default(0),
+  avgMs: integer('avg_ms'),
+  maxMs: integer('max_ms'),
+  error: text('error'),
+  requestedBy: uuid('requested_by').notNull(),
+  startedAt: ts('started_at').notNull().defaultNow(),
+  finishedAt: ts('finished_at'),
+});
+
+export const webCheckIssues = web.table('check_issues', {
+  id: uuid('id').primaryKey(),
+  checkId: uuid('check_id').notNull(),
+  tenantId: uuid('tenant_id').notNull(),
+  severity: text('severity').$type<'error' | 'warning'>().notNull(),
+  kind: text('kind').notNull(),
+  url: text('url').notNull(),
+  detail: text('detail').notNull().default(''),
+});

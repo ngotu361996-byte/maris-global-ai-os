@@ -255,7 +255,23 @@ Ghi tồn: `inventorySetQuantities` với `changeFromQuantity` và `@idempotent(
 `CHANGE_FROM_QUANTITY_STALE` là xung đột. Dòng lịch sử, cập nhật cục bộ và audit nằm trong một transaction.
 `SHOPIFY_ORIGIN`, `POSCAKE_API_URL` chỉ đổi khi kiểm thử.
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `tiktok`, `commerce`, `maris_ctx` (hàm ngữ cảnh).
+## Website, GA4 và Search Console (Giai đoạn 8)
+
+`apps/api/src/web` (Sprint 29). `WebService` giữ website (`web.sites`, duy nhất theo `url` khi chưa gỡ) và liên kết GA4
+(`properties/N`) và Search Console (`sc-domain:` hoặc tiền tố URL), mỗi liên kết gắn với một `google.connections` có scope
+chỉ đọc tương ứng; trước khi lưu, MARIS kiểm tra tài khoản đó thấy thuộc tính trong `accountSummaries` hoặc `sites`.
+Mọi lượt gọi Google đi qua `GoogleApiService` (host `analytics_data`, `analytics_admin`, `search_console`), ghi
+`integration.api_calls` với nhóm `analytics` hoặc `search_console`; 403 `PERMISSION_DENIED` là lỗi quyền, không thử lại.
+
+`WebSyncService` chạy mỗi `WEB_SYNC_HOURS` giờ: liệt kê website bằng `withSystem('web_sync')` (chính sách RLS của
+`web.sites` cho phép đọc khi `app.system = 'web_sync'`), rồi đọc từng website trong tenant của nó. Số liệu theo ngày
+được upsert theo `(site_id, day)`, danh sách top được thay mới trong cùng transaction. Đổi thuộc tính thì xóa số liệu cũ của nguồn đó.
+
+`WebCheckService` chạy kiểm tra ở nền sau khi ghi dòng `checks` (`running`) và audit; tự theo chuyển hướng (tối đa 5),
+mỗi bước phân giải DNS và chặn địa chỉ riêng (`isPrivate` của `ai/url-guard`), timeout 10 giây, đọc tối đa 2 MB HTML.
+Luật đọc trang, sitemap và lỗi SEO ở `rules.ts`. Lần kiểm tra bị ngắt do khởi động lại được đóng ở lần chạy sau.
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `tiktok`, `commerce`, `web`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

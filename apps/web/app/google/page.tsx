@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import {
   GOOGLE_LIMITS,
+  GOOGLE_SERVICE_HINT,
   GOOGLE_SERVICES,
   YOUTUBE_COSTS,
   YOUTUBE_DEFAULT_QUOTA,
@@ -162,7 +163,7 @@ export default function GooglePage() {
           <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm">
             <li>
               Vào console.cloud.google.com, tạo dự án (Project) cho doanh nghiệp. Ở “APIs &amp;
-              Services → Library”, bật <b>YouTube Data API v3</b>.
+              Services → Library”, bật <b>YouTube Data API v3</b>; muốn xem số liệu website ở trang Website và SEO thì bật thêm <b>Google Analytics Data API</b>, <b>Google Analytics Admin API</b> và <b>Google Search Console API</b>.
             </li>
             <li>
               Ở “OAuth consent screen” (Google Auth Platform), chọn đối tượng <b>External</b>, điền
@@ -321,7 +322,7 @@ export default function GooglePage() {
                     setServices((x) => (e.target.checked ? [...x, k] : x.filter((y) => y !== k)))
                   }
                 />
-                {GOOGLE_SERVICES[k].label} (xem kênh, tải video)
+                {GOOGLE_SERVICES[k].label} ({GOOGLE_SERVICE_HINT[k]})
               </label>
             ))}
             <button

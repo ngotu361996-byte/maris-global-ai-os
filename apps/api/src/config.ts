@@ -89,6 +89,17 @@ const envSchema = z.object({
   COMMERCE_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
   // Minutes between automatic reads of connected stores; 0 reads only on request.
   COMMERCE_SYNC_MIN: z.coerce.number().int().min(0).max(1440).default(15),
+  // Google Analytics 4 and Search Console hosts; changed only in tests.
+  GOOGLE_ANALYTICS_DATA_URL: z.string().url().default('https://analyticsdata.googleapis.com'),
+  GOOGLE_ANALYTICS_ADMIN_URL: z.string().url().default('https://analyticsadmin.googleapis.com'),
+  GOOGLE_SEARCH_CONSOLE_URL: z.string().url().default('https://searchconsole.googleapis.com'),
+  // Hours between automatic reads of GA4 and Search Console; 0 reads only on request.
+  WEB_SYNC_HOURS: z.coerce.number().int().min(0).max(168).default(6),
+  // Allow website checks on private networks (a site on this machine or the office LAN). Off by default (SSRF).
+  WEBSITE_ALLOW_PRIVATE_URLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   NODE_ENV: z.string().default('development'),
 });
 

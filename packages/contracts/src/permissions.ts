@@ -42,6 +42,8 @@ export const PERMISSIONS = [
   'commerce.read',
   'commerce.manage',
   'commerce.write',
+  'web.read',
+  'web.manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -72,6 +74,7 @@ export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
     'tiktok.read',
     'tiktok.publish',
     'commerce.read',
+    'web.read',
   ],
   member: [
     'tenant.read',

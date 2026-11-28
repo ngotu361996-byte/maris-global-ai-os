@@ -27,3 +27,4 @@ export * from './ads';
 export * from './google';
 export * from './tiktok';
 export * from './commerce';
+export * from './web';
