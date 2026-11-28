@@ -36,6 +36,9 @@ export const PERMISSIONS = [
   'google.read',
   'google.manage',
   'google.publish',
+  'tiktok.read',
+  'tiktok.manage',
+  'tiktok.publish',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number];
@@ -63,6 +66,8 @@ export const BUILTIN_ROLES: Record<string, readonly PermissionKey[]> = {
     'ads.manage',
     'google.read',
     'google.publish',
+    'tiktok.read',
+    'tiktok.publish',
   ],
   member: [
     'tenant.read',

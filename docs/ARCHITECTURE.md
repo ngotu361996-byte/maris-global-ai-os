@@ -220,7 +220,26 @@ bytes */<size>` (308 + `Range` = số byte đã nhận) và gửi tiếp, nên k
 `status.publishAt` của YouTube. Quy tắc tiêu đề, mô tả, thẻ, Shorts, cảnh báo nằm ở `youtube-rules.ts`.
 `YOUTUBE_UPLOADER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
 
-- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `maris_ctx` (hàm ngữ cảnh).
+## Trung tâm TikTok (Giai đoạn 8)
+
+`apps/api/src/tiktok` (Sprint 27, đặc tả Phần 17). `TiktokService` giữ ứng dụng TikTok của tenant (`tiktok.apps`), các
+tài khoản (`tiktok.accounts`, duy nhất theo `open_id`), thông tin người đăng (`creator`, từ `creator_info/query`) và video
+của tài khoản (`tiktok.videos`). Đăng nhập dùng `state` một lần trong Redis (`tiktok:oauth:<sha256>`, GETDEL) kèm PKCE
+dạng hex (Login Kit cho Desktop, nên `http://localhost` được nhận). Refresh token niêm phong bằng
+`sealFor('tiktok-refresh', …)`; TikTok có thể trả refresh token mới khi làm mới và MARIS thay ngay.
+
+Mọi lượt gọi TikTok đi qua `TiktokApiService.call`: TikTok trả `{data, error: {code}}` với `code = ok` khi thành công,
+luật đọc lỗi nằm ở `rules.ts`. Lệnh dừng theo tài khoản ở `tiktok:block:<tenant>:<account>`. Địa chỉ tải lên đã ký sẵn,
+không gửi token, chỉ nhận host `*.tiktokapis.com` (hoặc host API khi kiểm thử). `TIKTOK_AUTH_URL`, `TIKTOK_API_URL` chỉ đổi
+khi kiểm thử.
+
+Đăng bài: `TiktokPublishService` xếp bài vào `tiktok.posts` (khóa tư vấn theo tenant, kiểm tra 15 bài mỗi tài khoản trong
+24 giờ), vòng lặp 30 giây nhận bài đến hạn bằng `withSystem('tiktok_publisher')` và `FOR UPDATE SKIP LOCKED`. Mỗi bài:
+`creator_info` (Direct Post), `video/init` hoặc `inbox/video/init` với `FILE_UPLOAD`, `PUT` từng phần với `Content-Range`
+(số phần đã gửi lưu trong `stage.next` sau mỗi phần), rồi `status/fetch` mỗi 30 giây tới `PUBLISH_COMPLETE` hoặc
+`SEND_TO_USER_INBOX`. `TIKTOK_PUBLISHER_ENABLED=false` tắt vòng lặp (kiểm thử gọi `runOnce`).
+
+- PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `content`, `meta`, `crm`, `google`, `tiktok`, `maris_ctx` (hàm ngữ cảnh).
 - Khóa chính UUIDv7 sinh ở ứng dụng.
 - File SQL trong `packages/db/migrations` là nguồn chuẩn; `schema.ts` (Drizzle) phản chiếu để truy vấn có kiểu.
 

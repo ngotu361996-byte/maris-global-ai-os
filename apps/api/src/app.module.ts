@@ -22,6 +22,7 @@ import { ContentModule } from './content/content.module';
 import { MetaModule } from './meta/meta.module';
 import { CrmModule } from './crm/crm.module';
 import { GoogleModule } from './google/google.module';
+import { TiktokModule } from './tiktok/tiktok.module';
 
 @Module({})
 export class AppModule {
@@ -29,7 +30,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule, ContentModule, MetaModule, CrmModule, GoogleModule],
+      imports: [DbModule, RedisModule, AuditModule, OutboxModule, AuthModule, TenancyModule, MembersModule, SecretsModule, AiModule, ConnectorsModule, WorkflowsModule, PluginsModule, DevicesModule, ContentModule, MetaModule, CrmModule, GoogleModule, TiktokModule],
       controllers: [HealthController, TenantsController, RolesController],
       providers: [{ provide: APP_CONFIG, useValue: config }, { provide: APP_GUARD, useClass: RateLimitGuard }],
       exports: [APP_CONFIG],
