@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 18)**
+Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 19)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -9,7 +9,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6. Content Factory | Sprint 16 (kho nội dung) và 17 (AI viết nội dung) đã merge; Sprint 18 (xử lý ảnh) đang review; kế tiếp: 19 xử lý video, 20 kiểm định và nghiệm thu |
+| 6. Content Factory | Sprint 16 (kho nội dung), 17 (AI viết nội dung) và 18 (xử lý ảnh) đã merge; Sprint 19 (video và giọng đọc AI) đang review; kế tiếp: 20 kiểm định và nghiệm thu |
 | 7–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -131,7 +131,21 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 18 – Xử lý ảnh trên Media Worker (Giai đoạn 6)
+## Sprint 19 – Xử lý video bằng FFmpeg và giọng đọc AI (Giai đoạn 6)
+
+- Migration `0019`: cột `ai.provider_calls.content_item_id` (chi phí giọng đọc gắn với mục văn bản được đọc); chỉ mục việc `media.video` theo video gốc
+- Giọng đọc AI (đặc tả Phần 12): `POST /api/v1/content/items/:id/voiceover` (`content.generate`) đọc phiên bản hiện tại của một mục văn bản (tối đa 4.096 ký tự) bằng giọng OpenAI (`gpt-4o-mini-tts`), qua AI Provider loại OpenAI đang bật, Dừng khẩn cấp và ngân sách AI; ghi vào `ai.provider_calls` và audit `content.voiceover.created`
+- Sáu giọng: nữ (Nova sôi nổi, Coral ấm áp, Shimmer nhẹ nhàng) và nam (Onyx trầm chắc, Ash nam trẻ tự tin, Echo rõ ràng). Chế độ Tự động luân phiên nữ và nam, không dùng một giọng cho mọi video. Chỉnh được tốc độ (0,5–2×) và phong cách đọc; tiếng Việt và tiếng Anh có phong cách mặc định riêng
+- Kết quả là một thành phẩm Âm thanh (bản nháp), “chuyển thể từ” mục văn bản, mang theo nguồn gốc của phiên bản được đọc
+- Loại việc Worker mới `media.video`: cắt đoạn, đổi tỉ lệ khung hình (vuông 1:1, dọc 4:5, dọc 9:16, ngang 16:9, giữ khung gốc tối đa 4K), cắt cho vừa khung hoặc giữ trọn hình trên nền màu, giảm nhiễu, tăng nét, gắn logo, lồng giọng đọc (trộn với tiếng gốc nhỏ lại hoặc thay hẳn), làm ảnh bìa từ một khung hình; H.264 + AAC, bỏ metadata
+- `POST /api/v1/content/assets/:id/process-video` (`content.manage`): chỉ cho video đã tải lên, không lưu trữ, không bị đánh dấu “Không được dùng”, tối đa 4 GB; logo phải là ảnh; giọng đọc phải là mục âm thanh có tệp, chưa bị từ chối hay lưu trữ (giữ đúng phiên bản lúc giao việc)
+- Worker tải video, logo và giọng đọc của việc mình đang chạy (`GET /agent/jobs/:id/files/:assetId`, `GET /agent/jobs/:id/items/:itemId`) ra tệp tạm, gửi từng video và ảnh bìa lên (`preset=cover`). Máy chủ chỉ nhận video cho các tỉ lệ, ảnh cho ảnh bìa
+- Mỗi tỉ lệ thành một thành phẩm Video (bản nháp), ảnh bìa thành một thành phẩm Hình ảnh; phiên bản ghi đoạn cắt, giọng đọc, logo, giảm nhiễu và máy làm
+- MARIS Worker 0.19: tìm FFmpeg trên PATH hoặc `FFMPEG_PATH`, tự báo nhận việc video khi FFmpeg chạy được (có libx264); báo tiến độ theo phần trăm, dừng FFmpeg khi hủy
+- Web: Kho nội dung gốc, chọn một video, phần “Xử lý video”; Kho thành phẩm, mục văn bản có phần “Giọng đọc AI”. Sửa: ô “Phiên bản mới” không còn giữ chữ của mục mở trước
+- Giới hạn: chưa ghép nhiều đoạn video, chưa có phụ đề tự động, nhạc nền, AI tạo video; giá giọng đọc là ước tính theo số ký tự
+
+## Sprint 18 – Xử lý ảnh trên Media Worker (Giai đoạn 6, đã merge)
 
 - Migration `0018`: bảng `content.media_outputs` (RLS, mỗi việc và mỗi cỡ ảnh một kết quả); cột `content.item_versions.worker_job_id`
 - Loại việc Worker mới `media.image` (đặc tả Phần 13 và 26): chuẩn hóa kích thước theo nền tảng (vuông 1:1, dọc 4:5, dọc 9:16 cho Story/Reels/TikTok, ngang 16:9, thumbnail YouTube 1280×720, giữ cỡ gốc), cắt theo phần chính của ảnh hoặc giữ trọn ảnh trên nền màu, gắn logo (vị trí, cỡ, độ đậm, cách mép), cân chỉnh ánh sáng nhẹ, tăng độ nét, xuất JPEG/WebP/PNG

@@ -7,6 +7,8 @@ import { cpuPercent, parseNvidiaSmi, Sampler } from './metrics';
 const noFiles = {
   download: () => Promise.reject(new Error('không có tệp')),
   upload: () => Promise.reject(new Error('không gửi tệp')),
+  downloadTo: () => Promise.reject(new Error('không có tệp')),
+  uploadFile: () => Promise.reject(new Error('không gửi tệp')),
 };
 
 test('parses nvidia-smi output, keeping unreadable values as null', () => {
@@ -280,6 +282,7 @@ test('image jobs make each size, place the logo, strip location data and refuse 
       server: 'http://127.0.0.1:9',
       timeoutSec: 600,
       report: () => {},
+      ...noFiles,
       download: async (id) => {
         fetched.push(id);
         return id === input.assetId ? photo : logo;
@@ -307,10 +310,263 @@ test('image jobs make each size, place the logo, strip location data and refuse 
         server: 'http://127.0.0.1:9',
         timeoutSec: 600,
         report: () => {},
+        ...noFiles,
         download: async () => svg,
         upload: async () => ({ itemId: 'x' }),
       },
     ),
     (e: unknown) => e instanceof JobError && e.code === 'MEDIA_IMAGE_INVALID',
+  );
+});
+
+test('video arguments crop or fit each size, place the logo and mix or replace the sound', async () => {
+  const { videoArgs, cutRange, parseProbe, progressSec, coverArgs } = await import('./video');
+  const input = workerJobInputSchemas['media.video'].parse({
+    assetId: '00000000-0000-4000-8000-000000000001',
+    logoAssetId: '00000000-0000-4000-8000-000000000002',
+    voiceItemId: '00000000-0000-4000-8000-000000000003',
+    voiceVersion: 1,
+    presets: ['story', 'landscape', 'story'],
+    logo: { position: 'top-left', sizePct: 20, opacity: 0.5 },
+    startSec: 2,
+    endSec: 12,
+    denoise: true,
+    sharpen: true,
+  });
+  assert.deepEqual(input.presets, ['story', 'landscape']);
+  const probe = { durationSec: 30, width: 1920, height: 1080, hasAudio: true };
+  const cut = cutRange(input, probe.durationSec, 3600);
+  assert.deepEqual(cut, { start: 2, length: 10 });
+  const plan = videoArgs({
+    source: 'in.mp4',
+    logo: 'logo.png',
+    voice: 'voice.mp3',
+    out: 'out.mp4',
+    preset: 'story',
+    probe,
+    cut: cut as { start: number; length: number },
+    input,
+  });
+  assert.equal(plan.width, 1080);
+  assert.equal(plan.height, 1920);
+  const graph = plan.args[plan.args.indexOf('-filter_complex') + 1]!;
+  assert.match(graph, /scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920/);
+  assert.match(graph, /hqdn3d/);
+  assert.match(graph, /unsharp/);
+  assert.match(
+    graph,
+    /\[1:v\]scale=216:768:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=0.5\[logo\]/,
+  );
+  assert.match(graph, /overlay=32:32/);
+  assert.match(graph, /\[0:a\]volume=0.25\[orig\]/);
+  assert.match(graph, /amix=inputs=2:duration=first/);
+  assert.deepEqual(plan.args.slice(5, 11), ['-ss', '2', '-t', '10', '-i', 'in.mp4']);
+  assert.ok(plan.args.includes('-map_metadata'));
+
+  // Fit whole on a background, no logo, voice instead of the original sound.
+  const fit = videoArgs({
+    source: 'in.mp4',
+    logo: null,
+    voice: 'voice.mp3',
+    out: 'out.mp4',
+    preset: 'feed_square',
+    probe,
+    cut: { start: 0, length: 30 },
+    input: { ...input, fit: 'contain', background: '#ffffff', voiceMix: 'replace', denoise: false },
+  });
+  const g2 = fit.args[fit.args.indexOf('-filter_complex') + 1]!;
+  assert.match(g2, /pad=1080:1080:\(ow-iw\)\/2:\(oh-ih\)\/2:color=0xffffff/);
+  assert.match(g2, /\[1:a\]apad\[a\]/);
+  assert.doesNotMatch(g2, /0:a/);
+  assert.doesNotMatch(g2, /hqdn3d/);
+
+  // A silent video with no voice-over has no sound track.
+  const silent = videoArgs({
+    source: 'in.mp4',
+    logo: null,
+    voice: null,
+    out: 'out.mp4',
+    preset: 'original',
+    probe: { durationSec: 5, width: 4000, height: 3001, hasAudio: false },
+    cut: { start: 0, length: 5 },
+    input,
+  });
+  assert.ok(silent.args.includes('-an'));
+  assert.deepEqual([silent.width, silent.height], [3840, 2880]);
+
+  assert.match(
+    String(cutRange({ startSec: 40, endSec: null }, 30, 3600)),
+    /sau khi video kết thúc/,
+  );
+  assert.match(String(cutRange({ startSec: 0, endSec: null }, 7200, 3600)), /dài hơn 60 phút/);
+  assert.deepEqual(cutRange({ startSec: 5, endSec: 90 }, 30, 3600), { start: 5, length: 25 });
+
+  // A phone video recorded upright is shown portrait.
+  const turned = parseProbe(
+    JSON.stringify({
+      streams: [
+        { codec_type: 'video', width: 1920, height: 1080, side_data_list: [{ rotation: -90 }] },
+      ],
+      format: { duration: '12.5' },
+    }),
+  );
+  assert.deepEqual(turned, { durationSec: 12.5, width: 1080, height: 1920, hasAudio: false });
+  assert.throws(() => parseProbe(JSON.stringify({ streams: [{ codec_type: 'audio' }] })), /hình/);
+  assert.equal(progressSec('frame=10\nout_time_us=2500000\nout_time_ms=3000000\n'), 3);
+  assert.equal(progressSec('frame=1\n'), null);
+  assert.deepEqual(coverArgs('o.mp4', 99, 10, 'c.jpg').slice(5, 7), ['-ss', '9.9']);
+});
+
+test('video jobs run FFmpeg: cut, resize, logo, voice-over and a cover picture', async (t) => {
+  const { findFfmpeg, probeVideo } = await import('./video');
+  const ff = await findFfmpeg();
+  if (!ff) return t.skip('FFmpeg is not installed on this machine');
+  const { HANDLERS, JobError, capabilities } = await import('./jobs');
+  const { loadSharp } = await import('./image');
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, copyFileSync, writeFileSync, statSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  assert.ok((await capabilities({ allowCode: false })).includes('media.video'));
+
+  const dir = mkdtempSync(join(tmpdir(), 'maris-video-test-'));
+  const src = join(dir, 'src.mp4');
+  execFileSync(ff.ffmpeg, [
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc=size=640x360:rate=25:duration=4',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=4',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-shortest',
+    src,
+  ]);
+  const voice = join(dir, 'voice.wav');
+  execFileSync(ff.ffmpeg, [
+    '-v',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=880:duration=1',
+    voice,
+  ]);
+  const sharp = (await loadSharp())!;
+  const logo = join(dir, 'logo.png');
+  writeFileSync(
+    logo,
+    await sharp({ create: { width: 200, height: 100, channels: 4, background: '#ff000080' } })
+      .png()
+      .toBuffer(),
+  );
+  const input = {
+    assetId: '00000000-0000-4000-8000-000000000001',
+    logoAssetId: '00000000-0000-4000-8000-000000000002',
+    voiceItemId: '00000000-0000-4000-8000-000000000003',
+    voiceVersion: 1,
+    presets: ['story', 'feed_square'],
+    startSec: 1,
+    endSec: 3,
+    denoise: true,
+    sharpen: true,
+    coverAtSec: 0.5,
+  };
+  const got: string[] = [];
+  const sent: { preset: string; name: string; file: string }[] = [];
+  const kept = join(dir, 'kept');
+  const result = (await HANDLERS['media.video'](input, {
+    ...noFiles,
+    signal: new AbortController().signal,
+    server: 'http://127.0.0.1:9',
+    timeoutSec: 600,
+    report: () => {},
+    downloadTo: async (what, dest) => {
+      const id = 'assetId' in what ? what.assetId : what.itemId;
+      got.push(id);
+      copyFileSync(id === input.assetId ? src : id === input.logoAssetId ? logo : voice, dest);
+      return statSync(dest).size;
+    },
+    uploadFile: async (preset, name, file) => {
+      const copy = `${kept}-${name}`;
+      copyFileSync(file, copy);
+      sent.push({ preset, name, file: copy });
+      return { itemId: `item-${preset}` };
+    },
+  })) as { outputs: { preset: string; width: number; height: number; durationSec?: number }[] };
+  assert.deepEqual(got, [input.assetId, input.logoAssetId, input.voiceItemId]);
+  assert.deepEqual(
+    sent.map((s) => s.name),
+    ['story-1080x1920.mp4', 'feed_square-1080x1080.mp4', 'story-cover.jpg'],
+  );
+  assert.deepEqual(
+    result.outputs.map((o) => [o.preset, o.width, o.height]),
+    [
+      ['story', 1080, 1920],
+      ['feed_square', 1080, 1080],
+      ['cover', 1080, 1920],
+    ],
+  );
+  const story = await probeVideo(ff.ffprobe, sent[0]!.file);
+  assert.equal(story.width, 1080);
+  assert.equal(story.height, 1920);
+  assert.ok(story.hasAudio);
+  assert.ok(Math.abs(story.durationSec - 2) < 0.2, `cut to 2 s, got ${story.durationSec}`);
+  const cover = await sharp(sent[2]!.file).metadata();
+  assert.equal(cover.format, 'jpeg');
+  assert.equal(cover.width, 1080);
+
+  // A start after the end of the video is refused before any work.
+  await assert.rejects(
+    HANDLERS['media.video'](
+      {
+        ...input,
+        logoAssetId: null,
+        voiceItemId: null,
+        voiceVersion: null,
+        startSec: 10,
+        endSec: null,
+      },
+      {
+        ...noFiles,
+        signal: new AbortController().signal,
+        server: 'http://127.0.0.1:9',
+        timeoutSec: 600,
+        report: () => {},
+        downloadTo: async (_what, dest) => {
+          copyFileSync(src, dest);
+          return 1;
+        },
+      },
+    ),
+    (e: unknown) => e instanceof JobError && e.code === 'MEDIA_VIDEO_CUT_INVALID',
+  );
+
+  // A file that is not a video fails clearly.
+  await assert.rejects(
+    HANDLERS['media.video'](
+      { ...input, logoAssetId: null, voiceItemId: null, voiceVersion: null },
+      {
+        ...noFiles,
+        signal: new AbortController().signal,
+        server: 'http://127.0.0.1:9',
+        timeoutSec: 600,
+        report: () => {},
+        downloadTo: async (_what, dest) => {
+          writeFileSync(dest, 'không phải video');
+          return 1;
+        },
+      },
+    ),
+    (e: unknown) => e instanceof JobError && e.code === 'MEDIA_VIDEO_INVALID',
   );
 });

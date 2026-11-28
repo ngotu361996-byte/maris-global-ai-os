@@ -559,13 +559,13 @@ export class ContentService {
     );
   }
 
-  /** Adds a file version inside the caller's transaction (used by the Media Worker outputs). */
+  /** Adds a file version inside the caller's transaction (Media Worker outputs, AI voice-overs). */
   addFileVersionIn(
     tx: Tx,
     ctx: Ctx,
     item: ItemRow,
     file: StoredFile,
-    lineage: { sourceAssetIds: string[]; workerJobId: string; note: string },
+    lineage: { sourceAssetIds: string[]; workerJobId: string | null; note: string },
   ): Promise<ItemRow> {
     return this.addVersion(
       tx,

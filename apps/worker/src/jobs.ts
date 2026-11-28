@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { statfs } from 'node:fs/promises';
+import { mkdtemp, rm, stat, statfs } from 'node:fs/promises';
 import os from 'node:os';
+import { join } from 'node:path';
 import {
   IMAGE_PRESET_INFO,
   JOB_POLL_SEC,
   MEDIA_LIMITS,
+  VIDEO_COVER,
   workerJobInputSchemas,
   type ImagePreset,
   type MediaOutput,
@@ -14,14 +16,17 @@ import {
 import {
   claimJob,
   downloadJobFile,
+  downloadJobFileTo,
   finishJob,
   jobProgress,
   ServerError,
   uploadJobOutput,
+  uploadJobOutputFile,
 } from './client';
 import { loadSharp, renderImage } from './image';
 import { AGENT_VERSION, parseNvidiaSmi } from './metrics';
 import { dockerAvailable, runSandbox } from './sandbox';
+import { coverArgs, cutRange, findFfmpeg, probeVideo, runFfmpeg, videoArgs } from './video';
 
 /** Ollama on this machine only; the address is fixed so a job cannot point the worker elsewhere. */
 export const OLLAMA_URL = 'http://127.0.0.1:11434';
@@ -42,6 +47,18 @@ export interface JobContext {
   download(assetId: string, maxBytes: number): Promise<Buffer>;
   /** Sends one output image of this job. */
   upload(preset: ImagePreset, fileName: string, data: Buffer): Promise<{ itemId: string }>;
+  /** Saves a library file, or the voice-over item, of this job to disk. */
+  downloadTo(
+    what: { assetId: string } | { itemId: string },
+    dest: string,
+    maxBytes: number,
+  ): Promise<number>;
+  /** Sends one output file of this job from disk. */
+  uploadFile(
+    preset: ImagePreset | typeof VIDEO_COVER,
+    fileName: string,
+    file: string,
+  ): Promise<{ itemId: string }>;
 }
 
 export class JobError extends Error {
@@ -277,6 +294,151 @@ export const HANDLERS: Record<WorkerJobKind, Handler> = {
     }
     return { outputs };
   },
+
+  async 'media.video'(raw, ctx) {
+    const input = workerJobInputSchemas['media.video'].parse(raw);
+    const ff = await findFfmpeg();
+    if (!ff)
+      throw new JobError(
+        'MEDIA_UNAVAILABLE',
+        'Máy này chưa cài FFmpeg (cài bằng: winget install --id Gyan.FFmpeg -e, rồi mở lại cửa sổ)',
+      );
+    const cancelled = () => new JobError('CANCELLED', 'Đã dừng');
+    const dir = await mkdtemp(join(os.tmpdir(), 'maris-video-'));
+    try {
+      const maxBytes = MEDIA_LIMITS.videoMaxMb * 1024 * 1024;
+      const fetchTo = async (
+        what: { assetId: string } | { itemId: string },
+        name: string,
+        label: string,
+        max: number,
+      ) => {
+        const dest = join(dir, name);
+        try {
+          await ctx.downloadTo(what, dest, max);
+          return dest;
+        } catch (e) {
+          if (ctx.signal.aborted) throw cancelled();
+          throw new JobError(
+            'MEDIA_DOWNLOAD_FAILED',
+            `Không tải được ${label}: ${(e as Error).message}`,
+          );
+        }
+      };
+      ctx.report(2, 'Tải video gốc');
+      const source = await fetchTo({ assetId: input.assetId }, 'source', 'video gốc', maxBytes);
+      const logo = input.logoAssetId
+        ? await fetchTo(
+            { assetId: input.logoAssetId },
+            'logo',
+            'logo',
+            MEDIA_LIMITS.imageMaxMb * 1024 * 1024,
+          )
+        : null;
+      const voice = input.voiceItemId
+        ? await fetchTo({ itemId: input.voiceItemId }, 'voice', 'giọng đọc', maxBytes)
+        : null;
+
+      let probe;
+      try {
+        probe = await probeVideo(ff.ffprobe, source);
+      } catch (e) {
+        throw new JobError('MEDIA_VIDEO_INVALID', `Không đọc được video: ${(e as Error).message}`);
+      }
+      const cut = cutRange(input, probe.durationSec, MEDIA_LIMITS.videoMaxSec);
+      if (typeof cut === 'string') throw new JobError('MEDIA_VIDEO_CUT_INVALID', cut);
+      ctx.report(
+        5,
+        'Bắt đầu xử lý',
+        `Video ${probe.width}×${probe.height}, ${Math.round(probe.durationSec)} giây${probe.hasAudio ? '' : ', không có tiếng'}; giữ ${cut.length} giây từ giây ${cut.start}`,
+      );
+
+      const outputs: MediaOutput[] = [];
+      const steps = input.presets.length + (input.coverAtSec !== null ? 0.2 : 0);
+      let firstOut: { file: string; durationSec: number } | null = null;
+      for (const [i, preset] of input.presets.entries()) {
+        if (ctx.signal.aborted) throw cancelled();
+        const label = IMAGE_PRESET_INFO[preset].label;
+        const out = join(dir, `${preset}.mp4`);
+        const plan = videoArgs({ source, logo, voice, out, preset, probe, cut, input });
+        const base = 5 + (i / steps) * 90;
+        ctx.report(Math.round(base), `Đang làm video ${label}`);
+        try {
+          await runFfmpeg(ff.ffmpeg, plan.args, {
+            signal: ctx.signal,
+            onProgress: (sec) =>
+              ctx.report(
+                Math.min(99, Math.round(base + (Math.min(1, sec / cut.length) * 90) / steps)),
+                `Video ${label}: ${Math.min(100, Math.round((sec / cut.length) * 100))}%`,
+              ),
+          });
+        } catch (e) {
+          if (ctx.signal.aborted) throw cancelled();
+          throw new JobError(
+            'MEDIA_VIDEO_FAILED',
+            `FFmpeg không làm được video ${label}: ${(e as Error).message}`,
+          );
+        }
+        const { size } = await stat(out);
+        let saved: { itemId: string };
+        try {
+          saved = await ctx.uploadFile(preset, `${preset}-${plan.width}x${plan.height}.mp4`, out);
+        } catch (e) {
+          if (ctx.signal.aborted) throw cancelled();
+          throw new JobError(
+            'MEDIA_UPLOAD_FAILED',
+            `Không gửi được video ${label}: ${(e as Error).message}`,
+          );
+        }
+        outputs.push({
+          preset,
+          itemId: saved.itemId,
+          width: plan.width,
+          height: plan.height,
+          sizeBytes: size,
+          durationSec: plan.durationSec,
+        });
+        ctx.report(
+          Math.round(5 + ((i + 1) / steps) * 90),
+          `Xong ${i + 1}/${input.presets.length}`,
+          `Đã gửi video ${label} ${plan.width}×${plan.height} (${Math.round(size / 1024 / 1024)} MB)`,
+        );
+        if (!firstOut) firstOut = { file: out, durationSec: plan.durationSec };
+        else await rm(out, { force: true });
+      }
+
+      if (input.coverAtSec !== null && firstOut) {
+        ctx.report(96, 'Làm ảnh bìa');
+        const cover = join(dir, 'cover.jpg');
+        try {
+          await runFfmpeg(
+            ff.ffmpeg,
+            coverArgs(firstOut.file, input.coverAtSec, firstOut.durationSec, cover),
+            { signal: ctx.signal },
+          );
+          const saved = await ctx.uploadFile(VIDEO_COVER, `${input.presets[0]}-cover.jpg`, cover);
+          const first = outputs[0]!;
+          outputs.push({
+            preset: VIDEO_COVER,
+            itemId: saved.itemId,
+            width: first.width,
+            height: first.height,
+            sizeBytes: (await stat(cover)).size,
+          });
+          ctx.report(99, 'Xong ảnh bìa', 'Đã gửi ảnh bìa');
+        } catch (e) {
+          if (ctx.signal.aborted) throw cancelled();
+          throw new JobError(
+            'MEDIA_UPLOAD_FAILED',
+            `Không làm được ảnh bìa: ${(e as Error).message}`,
+          );
+        }
+      }
+      return { outputs, ffmpeg: ff.version };
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  },
 };
 
 /** Models installed in Ollama on this machine, or null when Ollama is not running. */
@@ -301,6 +463,7 @@ export async function capabilities(opts: { allowCode: boolean }): Promise<Worker
   if (models && models.length > 0) kinds.push('ollama.generate');
   if (opts.allowCode && (await dockerAvailable())) kinds.push('code.run');
   if (await loadSharp()) kinds.push('media.image');
+  if (await findFfmpeg()) kinds.push('media.video');
   return kinds;
 }
 
@@ -389,6 +552,26 @@ export class JobRunner {
         timeoutSec: job.timeoutSec,
         download: (assetId, maxBytes) =>
           downloadJobFile(this.server, this.token, job.id, assetId, maxBytes, controller.signal),
+        downloadTo: (what, dest, maxBytes) =>
+          downloadJobFileTo(
+            this.server,
+            this.token,
+            job.id,
+            what,
+            dest,
+            maxBytes,
+            controller.signal,
+          ),
+        uploadFile: (preset, fileName, file) =>
+          uploadJobOutputFile(
+            this.server,
+            this.token,
+            job.id,
+            preset,
+            fileName,
+            file,
+            controller.signal,
+          ),
         upload: (preset, fileName, data) =>
           uploadJobOutput(
             this.server,

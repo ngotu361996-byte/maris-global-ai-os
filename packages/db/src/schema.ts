@@ -227,6 +227,8 @@ export const aiProviderCalls = ai.table('provider_calls', {
   taskId: uuid('task_id'),
   councilId: uuid('council_id'),
   planId: uuid('plan_id'),
+  /** A voice-over: the text item that was read aloud. */
+  contentItemId: uuid('content_item_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 

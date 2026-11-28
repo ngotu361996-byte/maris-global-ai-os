@@ -13,6 +13,7 @@ export const WORKER_JOB_KINDS = [
   'test.wait',
   'code.run',
   'media.image',
+  'media.video',
 ] as const;
 export type WorkerJobKind = (typeof WORKER_JOB_KINDS)[number];
 /**
@@ -20,7 +21,10 @@ export type WorkerJobKind = (typeof WORKER_JOB_KINDS)[number];
  * job from the content library, which checks the image's rights). They cannot be queued or retried
  * from the jobs screen.
  */
-export const INTERNAL_JOB_KINDS = ['media.image'] as const satisfies readonly WorkerJobKind[];
+export const INTERNAL_JOB_KINDS = [
+  'media.image',
+  'media.video',
+] as const satisfies readonly WorkerJobKind[];
 export const isInternalJobKind = (k: string) =>
   (INTERNAL_JOB_KINDS as readonly string[]).includes(k);
 /** Kinds a person can queue on the jobs screen. */
@@ -50,6 +54,12 @@ export const WORKER_JOB_KIND_INFO: Record<
     description:
       'Chạy mã Python hoặc Node.js trong container Docker cách ly: không mạng, không ghi đĩa, giới hạn RAM, CPU và thời gian',
     timeoutSec: 120,
+  },
+  'media.video': {
+    label: 'Xử lý video',
+    description:
+      'Cắt đoạn, đổi tỉ lệ khung hình, gắn logo, giảm nhiễu, tăng nét, lồng giọng đọc và tạo ảnh bìa bằng FFmpeg trên máy Worker',
+    timeoutSec: 3600,
   },
   'media.image': {
     label: 'Xử lý ảnh',
@@ -118,7 +128,33 @@ export const MEDIA_LIMITS = {
   imageMaxMb: 50,
   /** Largest source image, in pixels (about 100 megapixels), so a crafted file cannot exhaust RAM. */
   maxInputPixels: 100_000_000,
+  /** Largest source video or voice-over, in MB (the content library's own limit may be lower). */
+  videoMaxMb: 4096,
+  /** Longest part of a video that one job renders, in seconds. */
+  videoMaxSec: 3 * 3600,
 } as const;
+
+/** Video outputs: the image sizes except the YouTube thumbnail, which is a picture. */
+export const VIDEO_PRESETS = [
+  'feed_square',
+  'feed_portrait',
+  'story',
+  'landscape',
+  'original',
+] as const satisfies readonly ImagePreset[];
+export type VideoPreset = (typeof VIDEO_PRESETS)[number];
+/** The output name of a video job's cover picture (ảnh bìa, cắt từ một khung hình). */
+export const VIDEO_COVER = 'cover' as const;
+export const VIDEO_QUALITIES = ['standard', 'high'] as const;
+export const VIDEO_QUALITY_LABEL: Record<(typeof VIDEO_QUALITIES)[number], string> = {
+  standard: 'Tiêu chuẩn (tệp nhẹ)',
+  high: 'Cao (tệp lớn hơn)',
+};
+export const VOICE_MIXES = ['mix', 'replace'] as const;
+export const VOICE_MIX_LABEL: Record<(typeof VOICE_MIXES)[number], string> = {
+  mix: 'Trộn với tiếng gốc (tiếng gốc nhỏ lại)',
+  replace: 'Thay hẳn tiếng gốc',
+};
 
 /** Device kinds that may run code.run; the server adds this target to every code job. */
 export const CODE_RUNNER_KINDS = ['code_runner'] as const satisfies readonly DeviceKind[];
@@ -162,6 +198,56 @@ export const JOB_POLL_SEC = 5;
 /** Largest result a worker may send back, in bytes of JSON. */
 export const JOB_RESULT_MAX_BYTES = 64 * 1024;
 
+const logoSchema = z
+  .object({
+    position: z.enum(LOGO_POSITIONS).default('bottom-right'),
+    /** Logo width as a share of the image width. */
+    sizePct: z.number().int().min(5).max(40).default(15),
+    opacity: z.number().min(0.1).max(1).default(1),
+    marginPct: z.number().int().min(0).max(10).default(3),
+  })
+  .strict()
+  .default({ position: 'bottom-right', sizePct: 15, opacity: 1, marginPct: 3 });
+
+const seconds = z.number().min(0).max(MEDIA_LIMITS.videoMaxSec);
+
+export const mediaVideoObject = z
+  .object({
+    assetId: z.uuid(),
+    logoAssetId: z.uuid().nullable().default(null),
+    /** An audio item (e.g. an AI voice-over) to lay over the video. */
+    voiceItemId: z.uuid().nullable().default(null),
+    /** The voice item's version the job uses (set by MARIS when the job is queued). */
+    voiceVersion: z.number().int().min(1).nullable().default(null),
+    voiceMix: z.enum(VOICE_MIXES).default('mix'),
+    /** Volume of the original sound when mixing, 0 to 1. */
+    originalVolume: z.number().min(0).max(1).default(0.25),
+    folderId: z.uuid().nullable().default(null),
+    presets: z
+      .array(z.enum(VIDEO_PRESETS))
+      .min(1, 'Chọn ít nhất một tỉ lệ khung hình')
+      .max(VIDEO_PRESETS.length)
+      .transform((p) => [...new Set(p)]),
+    fit: z.enum(IMAGE_FITS).default('cover'),
+    background: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'Màu nền dạng #RRGGBB')
+      .default('#000000'),
+    logo: logoSchema,
+    /** Keep only this part of the video (cắt đoạn); end null means to the end. */
+    startSec: seconds.default(0),
+    endSec: seconds.nullable().default(null),
+    denoise: z.boolean().default(false),
+    sharpen: z.boolean().default(false),
+    quality: z.enum(VIDEO_QUALITIES).default('standard'),
+    /** Also save a cover picture from the frame at this second of the output. */
+    coverAtSec: seconds.nullable().default(null),
+  })
+  .strict();
+/** The end of a cut must come after its start. */
+export const endAfterStart = (v: { startSec: number; endSec: number | null }) =>
+  v.endSec === null || v.endSec > v.startSec;
+
 export const workerJobInputSchemas = {
   diagnostics: z.object({}).strict(),
   'ollama.generate': z
@@ -204,16 +290,7 @@ export const workerJobInputSchemas = {
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, 'Màu nền dạng #RRGGBB')
         .default('#ffffff'),
-      logo: z
-        .object({
-          position: z.enum(LOGO_POSITIONS).default('bottom-right'),
-          /** Logo width as a share of the image width. */
-          sizePct: z.number().int().min(5).max(40).default(15),
-          opacity: z.number().min(0.1).max(1).default(1),
-          marginPct: z.number().int().min(0).max(10).default(3),
-        })
-        .strict()
-        .default({ position: 'bottom-right', sizePct: 15, opacity: 1, marginPct: 3 }),
+      logo: logoSchema,
       /** Stretch the levels of a dull image (cân chỉnh ánh sáng). */
       autoLevel: z.boolean().default(false),
       sharpen: z.boolean().default(false),
@@ -221,6 +298,10 @@ export const workerJobInputSchemas = {
       quality: z.number().int().min(50).max(100).default(85),
     })
     .strict(),
+  'media.video': mediaVideoObject.refine(endAfterStart, {
+    message: 'Thời điểm kết thúc phải sau thời điểm bắt đầu',
+    path: ['endSec'],
+  }),
 } satisfies Record<WorkerJobKind, z.ZodType>;
 export type WorkerJobInput<K extends WorkerJobKind> = z.infer<(typeof workerJobInputSchemas)[K]>;
 
@@ -326,13 +407,16 @@ export interface CodeRunResult {
   stderrTruncated: boolean;
 }
 
-/** One finished image of a media.image job, as the worker reports it. */
+/** One finished image or video of a media job, as the worker reports it. */
 export interface MediaOutput {
-  preset: ImagePreset;
+  /** A size, or 'cover' for a video job's cover picture. */
+  preset: ImagePreset | typeof VIDEO_COVER;
   itemId: string;
   width: number;
   height: number;
   sizeBytes: number;
+  /** Videos: length in seconds. */
+  durationSec?: number;
 }
 
 /** The answer to a worker that sends one output image. */

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   IMAGE_FIT_LABEL,
@@ -8,85 +7,18 @@ import {
   IMAGE_FORMATS,
   IMAGE_PRESET_INFO,
   IMAGE_PRESETS,
-  ITEM_STATUS_LABEL,
   LOGO_POSITION_LABEL,
   LOGO_POSITIONS,
   MEDIA_LIMITS,
-  WORKER_JOB_STATUS_LABEL,
   type AssetResponse,
   type FolderResponse,
   type ImagePreset,
   type MediaJobResponse,
   type MediaJobsResponse,
 } from '@maris/contracts';
-import { btnCls, btnGhostCls, inputCls } from '@/components/ui';
-import { api, fileUrl } from '@/lib/api';
-
-/** A finished image: small preview, open and download. */
-function Output({ o }: { o: MediaJobResponse['outputs'][number] }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [ext, setExt] = useState('jpg');
-  useEffect(() => {
-    let u: string | null = null;
-    fileUrl(`/content/items/${o.itemId}/versions/1/file?inline=1`)
-      .then(async (x) => {
-        setUrl((u = x));
-        const type = (await (await fetch(x)).blob()).type;
-        setExt(type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg');
-      })
-      .catch(() => setUrl(null));
-    return () => {
-      if (u) URL.revokeObjectURL(u);
-    };
-  }, [o.itemId]);
-  return (
-    <li className="flex items-center gap-3 rounded border border-line p-2">
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={o.title}
-          className="h-20 w-20 rounded border border-line object-contain"
-        />
-      ) : (
-        <span className="flex h-20 w-20 items-center justify-center rounded border border-line text-xs text-muted">
-          …
-        </span>
-      )}
-      <span className="grid gap-1">
-        <span className="text-sm">
-          {IMAGE_PRESET_INFO[o.preset].label}{' '}
-          <span className="text-xs text-muted">({ITEM_STATUS_LABEL[o.status]})</span>
-        </span>
-        <span className="flex flex-wrap gap-2">
-          {url && (
-            <a
-              className={`${btnCls} px-2 py-0.5 text-xs`}
-              href={url}
-              download={`${o.title.replace(/[\\/:*?"<>|]/g, '-')}.${ext}`}
-            >
-              Tải về
-            </a>
-          )}
-          <Link
-            className={`${btnGhostCls} px-2 py-0.5 text-xs`}
-            href={`/content/items?open=${o.itemId}`}
-          >
-            Mở để duyệt
-          </Link>
-        </span>
-      </span>
-    </li>
-  );
-}
-
-const STATUS_CLS: Record<MediaJobResponse['status'], string> = {
-  queued: 'border-line text-muted',
-  running: 'border-accent text-accent',
-  completed: 'border-green-600 text-green-500',
-  failed: 'border-danger text-danger',
-  cancelled: 'border-line text-muted',
-};
+import { btnCls, inputCls } from '@/components/ui';
+import { api } from '@/lib/api';
+import { MediaJobList } from './MediaJobList';
 
 /**
  * Image processing for one source image (spec Part 13): choose the sizes, how to fit them, a logo
@@ -381,50 +313,7 @@ export function ImageProcessor({
         </form>
       )}
 
-      {data && data.jobs.length > 0 && (
-        <ul className="mt-4 grid gap-2 text-sm">
-          {data.jobs.map((j) => (
-            <li key={j.id} className="rounded border border-line p-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className={`rounded border px-1.5 py-0.5 ${STATUS_CLS[j.status]}`}>
-                  {WORKER_JOB_STATUS_LABEL[j.status]}
-                  {j.status === 'running' ? ` ${j.progress}%` : ''}
-                </span>
-                <span className="text-muted">
-                  {j.presets.map((p) => IMAGE_PRESET_INFO[p].label).join(', ')}
-                  {j.logoAssetId ? ' · có logo' : ''}
-                </span>
-                <span className="text-muted">
-                  {j.createdByName}, {new Date(j.createdAt).toLocaleString('vi-VN')}
-                  {j.deviceName ? ` · ${j.deviceName}` : ''}
-                </span>
-                {(j.status === 'queued' || j.status === 'running') && !j.cancelRequested && (
-                  <button
-                    className={`${btnGhostCls} px-2 py-0.5 text-xs`}
-                    onClick={() => cancel(j.id)}
-                  >
-                    Hủy
-                  </button>
-                )}
-              </div>
-              {j.status === 'running' && j.progressNote && (
-                <p className="mt-1 text-xs text-muted">{j.progressNote}</p>
-              )}
-              {j.status === 'queued' && (
-                <p className="mt-1 text-xs text-muted">Đang chờ một Worker nhận việc.</p>
-              )}
-              {j.errorMessage && <p className="mt-1 text-xs text-danger">{j.errorMessage}</p>}
-              {j.outputs.length > 0 && (
-                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {j.outputs.map((o) => (
-                    <Output key={o.itemId} o={o} />
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {data && <MediaJobList jobs={data.jobs} onCancel={cancel} />}
     </section>
   );
 }

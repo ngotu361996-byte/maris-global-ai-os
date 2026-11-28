@@ -18,6 +18,7 @@ import { btnCls, btnGhostCls, inputCls, Notice, Panel } from '@/components/ui';
 import { api, fileUrl, uploadTo } from '@/lib/api';
 import { useMe } from '@/lib/useMe';
 import { ImageProcessor } from './ImageProcessor';
+import { VideoProcessor } from './VideoProcessor';
 
 const RIGHTS_CLS: Record<RightsStatus, string> = {
   owned: 'border-green-600 text-green-500',
@@ -628,6 +629,17 @@ export default function ContentSourcePage() {
               )}
               {selected.kind === 'image' && selected.file && (
                 <ImageProcessor
+                  key={selected.id}
+                  asset={selected}
+                  onDone={(m) => {
+                    setError(null);
+                    setOk(m);
+                  }}
+                  onError={fail}
+                />
+              )}
+              {selected.kind === 'video' && selected.file && (
+                <VideoProcessor
                   key={selected.id}
                   asset={selected}
                   onDone={(m) => {

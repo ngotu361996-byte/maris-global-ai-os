@@ -37,6 +37,12 @@ import {
   CONTENT_LIBRARIES,
   IMAGE_PRESETS,
   processImageSchema,
+  processVideoSchema,
+  voiceoverSchema,
+  VIDEO_COVER,
+  type ProcessVideo,
+  type VoiceoverInput,
+  type VoiceoverResponse,
   type MediaJobResponse,
   type MediaJobsResponse,
   type MediaOutputResponse,
@@ -71,6 +77,7 @@ import { RequirePermission, TenantGuard } from '../tenancy/tenant.guard';
 import { ContentAiService } from './content-ai.service';
 import { ContentMediaService } from './content-media.service';
 import { ContentService } from './content.service';
+import { ContentVoiceService } from './content-voice.service';
 
 const ctxOf = (user: AuthUser, tenant: TenantContext, req: Request): Ctx => ({
   tenantId: tenant.id,
@@ -127,6 +134,7 @@ export class ContentController {
     private readonly content: ContentService,
     private readonly ai: ContentAiService,
     private readonly media: ContentMediaService,
+    private readonly voice: ContentVoiceService,
   ) {}
 
   // ---------------------------------------------------------------- folders
@@ -488,7 +496,23 @@ export class ContentController {
     return this.ai.cancel(ctxOf(user, tenant, req), id, tenant.permissions.has('ai.approve'));
   }
 
-  // ---------------------------------------------------------------- image processing
+  // ---------------------------------------------------------------- AI voice-over
+
+  @Post('items/:id/voiceover')
+  @HttpCode(201)
+  @RequirePermission('content.generate')
+  @RateLimit({ name: 'content-voiceover', limit: 20, windowSec: 60, by: 'ip' })
+  voiceover(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(voiceoverSchema)) body: VoiceoverInput,
+    @Req() req: Request,
+  ): Promise<VoiceoverResponse> {
+    return this.voice.voiceover(ctxOf(user, tenant, req), id, body);
+  }
+
+  // ---------------------------------------------------------------- image and video processing
 
   @Post('assets/:id/process-image')
   @HttpCode(202)
@@ -501,6 +525,19 @@ export class ContentController {
     @Req() req: Request,
   ): Promise<MediaJobResponse> {
     return this.media.processImage(ctxOf(user, tenant, req), id, body);
+  }
+
+  @Post('assets/:id/process-video')
+  @HttpCode(202)
+  @RequirePermission('content.manage')
+  processVideo(
+    @CurrentUser() user: AuthUser,
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodPipe(processVideoSchema)) body: ProcessVideo,
+    @Req() req: Request,
+  ): Promise<MediaJobResponse> {
+    return this.media.processVideo(ctxOf(user, tenant, req), id, body);
   }
 
   @Get('assets/:id/media-jobs')
@@ -527,11 +564,12 @@ export class ContentController {
   }
 }
 
-const outputQuery = z.object({ preset: z.enum(IMAGE_PRESETS) });
+const outputQuery = z.object({ preset: z.enum([...IMAGE_PRESETS, VIDEO_COVER]) });
 
 /**
  * Files of a media job, for the worker running it (device key in X-Maris-Device, no session).
- * The worker calls in; it can read only the image and logo of a job it runs now.
+ * The worker calls in; it can read only the image or video, logo and voice-over of a job it runs
+ * now.
  */
 @Controller('agent/jobs')
 export class ContentAgentController {
@@ -546,6 +584,17 @@ export class ContentAgentController {
     @Res() res: Response,
   ): Promise<void> {
     sendFile(res, await this.media.agentFile(key, id, assetId), false);
+  }
+
+  @Get(':id/items/:itemId')
+  @RateLimit({ name: 'agent-file', limit: 120, windowSec: 60, by: 'ip' })
+  async item(
+    @Headers('x-maris-device') key: string | undefined,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    sendFile(res, await this.media.agentVoice(key, id, itemId), false);
   }
 
   @Post(':id/outputs')
