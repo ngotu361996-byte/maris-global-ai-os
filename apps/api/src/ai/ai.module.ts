@@ -29,6 +29,6 @@ import { SkillsService } from './skills.service';
 @Module({
   controllers: [AiProvidersController, ChatController, AgentsController, MemoryController, TasksController, CouncilController, FilesController, PlansController, SkillsController],
   providers: [AiProvidersService, AiRouterService, ChatService, CircuitBreakerService, AgentsService, MemoryService, ControlService, CostGovernorService, TasksService, ModelsService, CouncilService, FilesService, PlansService, SkillsService],
-  exports: [AiRouterService, AiProvidersService, TasksService, ControlService, SkillsService, CostGovernorService],
+  exports: [AiRouterService, AiProvidersService, TasksService, ControlService, SkillsService, CostGovernorService, ModelsService],
 })
 export class AiModule {}

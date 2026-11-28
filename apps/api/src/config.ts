@@ -51,6 +51,10 @@ const envSchema = z.object({
   // The market's time zone: per-day post limits and publishing slots follow it.
   META_TIMEZONE: z.string().min(1).default('Asia/Ho_Chi_Minh'),
   META_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
+  // The address Meta reaches this API at, for the webhook (public HTTPS in production).
+  PUBLIC_API_URL: z.string().url().default('http://localhost:4000'),
+  // Reads new comments and messages every this many minutes while the webhook is quiet; 0 = off.
+  META_INBOX_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
   NODE_ENV: z.string().default('development'),
 });
 

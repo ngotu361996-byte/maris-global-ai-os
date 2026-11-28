@@ -229,6 +229,8 @@ export const aiProviderCalls = ai.table('provider_calls', {
   planId: uuid('plan_id'),
   /** A voice-over: the text item that was read aloud. */
   contentItemId: uuid('content_item_id'),
+  /** An AI reply suggestion for an inbox conversation. */
+  metaThreadId: uuid('meta_thread_id'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 
@@ -1022,6 +1024,8 @@ export const metaApps = meta.table('apps', {
   appSecretName: text('app_secret_name').notNull(),
   graphVersion: text('graph_version').notNull(),
   budgets: jsonb('budgets').$type<Record<string, number>>().notNull().default({}),
+  webhookVerifyToken: text('webhook_verify_token'),
+  webhookLastAt: ts('webhook_last_at'),
   updatedBy: uuid('updated_by').notNull(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
@@ -1065,6 +1069,7 @@ export const metaAssets = meta.table('assets', {
   enabled: boolean('enabled').notNull().default(false),
   syncedAt: ts('synced_at').notNull().defaultNow(),
   removedAt: ts('removed_at'),
+  inboxSyncedAt: ts('inbox_synced_at'),
 });
 
 export const apiCalls = integration.table('api_calls', {
@@ -1114,4 +1119,63 @@ export const metaPosts = meta.table('posts', {
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
   publishedAt: ts('published_at'),
+});
+
+export type MetaChannel = 'messenger' | 'ig_dm' | 'fb_comment' | 'ig_comment';
+
+export const metaThreads = meta.table('threads', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  assetId: uuid('asset_id').notNull(),
+  channel: text('channel').$type<MetaChannel>().notNull(),
+  threadKey: text('thread_key').notNull(),
+  customerId: text('customer_id').notNull(),
+  customerName: text('customer_name'),
+  postId: text('post_id'),
+  status: text('status').$type<'open' | 'done'>().notNull().default('open'),
+  assignedTo: uuid('assigned_to'),
+  unread: integer('unread').notNull().default(0),
+  snippet: text('snippet').notNull().default(''),
+  lastMessageAt: ts('last_message_at').notNull(),
+  lastInboundAt: ts('last_inbound_at'),
+  aiSuggestion: text('ai_suggestion'),
+  aiHandoff: boolean('ai_handoff').notNull().default(false),
+  aiReason: text('ai_reason'),
+  aiAt: ts('ai_at'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const metaMessages = meta.table('messages', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  threadId: uuid('thread_id').notNull(),
+  direction: text('direction').$type<'in' | 'out'>().notNull(),
+  externalId: text('external_id'),
+  clientKey: uuid('client_key'),
+  authorName: text('author_name'),
+  body: text('body').notNull().default(''),
+  attachments: jsonb('attachments')
+    .$type<{ type: string; url: string | null }[]>()
+    .notNull()
+    .default([]),
+  status: text('status').$type<'received' | 'sending' | 'sent' | 'failed' | 'unknown'>().notNull(),
+  sentAt: ts('sent_at').notNull(),
+  sentBy: uuid('sent_by'),
+  aiAssisted: boolean('ai_assisted').notNull().default(false),
+  localDay: text('local_day'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+export const metaWebhookEvents = meta.table('webhook_events', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull(),
+  eventKey: text('event_key').notNull(),
+  object: text('object').notNull(),
+  field: text('field').notNull(),
+  outcome: text('outcome').$type<'stored' | 'ignored'>().notNull(),
+  detail: text('detail').notNull().default(''),
+  receivedAt: ts('received_at').notNull().defaultNow(),
 });

@@ -242,6 +242,10 @@ export default function MetaPage() {
               bước này Facebook sẽ báo “Invalid Scopes”.
             </li>
             <li>
+              Ở Cài đặt ứng dụng → Nâng cao → Bảo mật, đặt “Ứng dụng gốc hoặc ứng dụng máy tính?” là
+              Không. Nếu để Có, Facebook báo “the app is configured as a desktop app”.
+            </li>
+            <li>
               Ở phần cài đặt đăng nhập, thêm “URI chuyển hướng OAuth hợp lệ”:{' '}
               <code className="rounded bg-bg px-1">{s.redirectUri}</code>
             </li>

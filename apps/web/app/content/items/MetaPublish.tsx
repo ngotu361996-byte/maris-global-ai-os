@@ -66,6 +66,13 @@ export function MetaPublish({ detail }: { detail: ItemDetailResponse }) {
       .catch(() => setHidden(true));
     loadPosts();
   }, [loadPosts]);
+  // While a post waits or is being posted, look again so its status changes without a reload.
+  const waiting = posts.some((p) => ['scheduled', 'publishing', 'processing'].includes(p.status));
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(loadPosts, 10_000);
+    return () => clearInterval(t);
+  }, [waiting, loadPosts]);
 
   if (hidden || assets === null) return null;
   const usable = assets.filter(
