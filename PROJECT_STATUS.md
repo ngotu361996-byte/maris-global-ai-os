@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 19)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **6 – Content Factory (Sprint 20, nghiệm thu)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -9,7 +9,7 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 | 3. AI Central Command | Xong: Sprint 3–8 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-3-ai-central-command.md) |
 | 4. Skills, Workflow, Connector, Plugin | Xong: Sprint 9–12 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-4-open-ecosystem.md). Plugin chạy mã chờ sandbox ở Giai đoạn 5 |
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
-| 6. Content Factory | Sprint 16 (kho nội dung), 17 (AI viết nội dung) và 18 (xử lý ảnh) đã merge; Sprint 19 (video và giọng đọc AI) đang review; kế tiếp: 20 kiểm định và nghiệm thu |
+| 6. Content Factory | Sprint 16–19 đã merge; Sprint 20 (dây chuyền kiểm định) đang review. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
 | 7–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
@@ -131,7 +131,20 @@ Cập nhật: 2026-11-27 · Giai đoạn hiện tại: **6 – Content Factory (
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
 
-## Sprint 19 – Xử lý video bằng FFmpeg và giọng đọc AI (Giai đoạn 6)
+## Sprint 20 – Dây chuyền kiểm định nội dung (Giai đoạn 6)
+
+- Migration `0020`: cột `media_width`, `media_height`, `duration_ms` của `content.item_versions`. Cỡ ảnh (PNG, JPEG, GIF, WebP) và cỡ, thời lượng video MP4/MOV đọc từ 64 KB đầu của tệp khi nhận; video có chỉ mục ở cuối tệp thì để trống
+- Kiểm định tự động (đặc tả Phần 12, M30) chạy trên phiên bản hiện tại, không lưu bảng riêng nên luôn khớp với quy tắc mới nhất. Ba mức: lỗi, cảnh báo, thông tin
+- Chữ: độ dài và số hashtag theo nền tảng (`PLATFORM_LIMITS`: Instagram 2.200 ký tự, 30 hashtag; TikTok 4.000; YouTube 5.000, 15 hashtag), chỗ chưa điền (`[giá]`, `{{link}}`, TODO) là lỗi. Lời quảng cáo rủi ro theo Luật Quảng cáo và chính sách quảng cáo của nền tảng (“nhất”, “số 1”, “cam kết”, chữa bệnh, giảm cân, trắng da, an toàn tuyệt đối, và tiếng Anh), viết hoa quá nhiều, “!!!”, ngôn ngữ không khớp là cảnh báo
+- Tệp: sai loại tệp, ảnh cạnh ngắn dưới 320 px, video dưới 540p, dưới 1 giây hay dài hơn giới hạn nền tảng là lỗi; ảnh dưới 1080 px, video dưới 720p, tỉ lệ khung không hợp nền tảng là cảnh báo; chưa đọc được cỡ hay thời lượng là thông tin
+- Lỗi chặn Gửi duyệt (`409 CONTENT_QA_FAILED`) và Duyệt (nằm trong “Chưa duyệt được”). Audit `content.item.submitted` và `content.item.approved` ghi `qa: {status, codes}`
+- `GET /content/items/:id` trả `qa`; danh sách trả `qaStatus`; phiên bản trả `media` (cỡ, thời lượng)
+- Web: Kho thành phẩm có cột “Kiểm định” (Đạt, Cần xem lại, Chưa đạt) và phần “Kiểm định tự động” trong chi tiết; nút Gửi duyệt tắt khi chưa đạt
+- Sửa test Sprint 18: ảnh mẫu đổi từ 1×1 sang 1080×1080 vì ảnh 1×1 nay bị kiểm định chặn
+- Giới hạn: chỉ dựa trên quy tắc, có thể báo nhầm hoặc bỏ sót; chưa kiểm định bằng AI, chưa đọc chữ trên ảnh hay lời trong video
+- [Báo cáo nghiệm thu Giai đoạn 6](docs/phases/phase-6-content-factory.md)
+
+## Sprint 19 – Xử lý video bằng FFmpeg và giọng đọc AI (Giai đoạn 6, đã merge)
 
 - Migration `0019`: cột `ai.provider_calls.content_item_id` (chi phí giọng đọc gắn với mục văn bản được đọc); chỉ mục việc `media.video` theo video gốc
 - Giọng đọc AI (đặc tả Phần 12): `POST /api/v1/content/items/:id/voiceover` (`content.generate`) đọc phiên bản hiện tại của một mục văn bản (tối đa 4.096 ký tự) bằng giọng OpenAI (`gpt-4o-mini-tts`), qua AI Provider loại OpenAI đang bật, Dừng khẩn cấp và ngân sách AI; ghi vào `ai.provider_calls` và audit `content.voiceover.created`

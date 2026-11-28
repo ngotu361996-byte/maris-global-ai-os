@@ -9,9 +9,10 @@ const OWNER = {
   tenantName: 'Công ty Hình ảnh',
 };
 
-// A valid 1×1 PNG; a different tail gives each upload its own content hash.
+// The start of a PNG whose header says 1080×1080 (the size the quality checks read); a different
+// tail gives each upload its own content hash.
 const PNG_HEX =
-  '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082';
+  '89504e470d0a1a0a0000000d49484452000004380000043808060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082';
 const png = (tag: string) => Buffer.concat([Buffer.from(PNG_HEX, 'hex'), Buffer.from(tag)]);
 
 const beat = (capabilities: string[]) => ({

@@ -141,6 +141,11 @@ Giọng đọc AI (Sprint 19): `ContentVoiceService` gọi `/audio/speech` của
 `url-guard`, khóa đọc từ Secret Vault, Cost Governor lọc theo ngân sách), ghi `ai.provider_calls` có `content_item_id`,
 rồi lưu tệp thành thành phẩm âm thanh chuyển thể từ mục văn bản, cùng audit trong một transaction.
 
+Kiểm định (Sprint 20): `qaReport` trong `content-qa.ts` là hàm thuần, chạy trên phiên bản hiện tại mỗi lần đọc chi tiết,
+gửi duyệt và duyệt; không có bảng kết quả nên đổi quy tắc là có hiệu lực ngay. Cỡ và thời lượng tệp do `mediaInfo`
+(`files/media-info.ts`) đọc từ 64 KB đầu mà `putStream` đã giữ, lưu vào cột của `item_versions`. Lỗi kiểm định nằm
+trong `approvalBlockers` và chặn `submit`; audit ghi `qa: {status, codes}`.
+
 
 
 - PostgreSQL 16, mỗi module một schema. Hiện có `identity`, `security`, `work`, `ai`, `integration`, `ext`, `infra`, `maris_ctx` (hàm ngữ cảnh).

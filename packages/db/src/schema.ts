@@ -969,6 +969,10 @@ export const contentItemVersions = content.table('item_versions', {
   workflowRunId: uuid('workflow_run_id'),
   aiTaskId: uuid('ai_task_id'),
   workerJobId: uuid('worker_job_id'),
+  /** Read from the file when it was stored; null when unknown. */
+  mediaWidth: integer('media_width'),
+  mediaHeight: integer('media_height'),
+  durationMs: integer('duration_ms'),
   note: text('note'),
   createdBy: uuid('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
