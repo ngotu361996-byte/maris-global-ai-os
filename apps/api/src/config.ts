@@ -59,6 +59,16 @@ const envSchema = z.object({
   META_LEADS_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(15),
   // Reads campaigns and daily ad figures of each ad account every this many minutes (in turn); 0 = off.
   META_ADS_POLL_MIN: z.coerce.number().int().min(0).max(1440).default(30),
+  // Google sign-in, token and API hosts (spec Part 16). Changed only for tests.
+  GOOGLE_ACCOUNTS_URL: z.string().url().default('https://accounts.google.com'),
+  GOOGLE_OAUTH_URL: z.string().url().default('https://oauth2.googleapis.com'),
+  GOOGLE_API_URL: z.string().url().default('https://www.googleapis.com'),
+  GOOGLE_RETRY_BASE_MS: z.coerce.number().int().min(0).max(60_000).default(500),
+  // Uploads approved videos to YouTube from this process (spec Part 17).
+  YOUTUBE_UPLOADER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   NODE_ENV: z.string().default('development'),
 });
 

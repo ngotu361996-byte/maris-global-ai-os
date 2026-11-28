@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (xong, chờ Giai đoạn 8)**
+Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **8 – Multi-Platform (Sprint 26)**
 
 | Giai đoạn | Trạng thái |
 | --- | --- |
@@ -11,7 +11,8 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (xo
 | 5. Hạ tầng | Xong: Sprint 13–15 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-5-infrastructure.md) |
 | 6. Content Factory | Xong: Sprint 16–20 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-6-content-factory.md) |
 | 7. Meta Platform | Xong: Sprint 21–25 đã merge. [Báo cáo nghiệm thu](docs/phases/phase-7-meta-platform.md) |
-| 8–14 | Chưa bắt đầu |
+| 8. Multi-Platform | Đang làm: Sprint 26 (Google, YouTube). Kế hoạch: S27 TikTok, S28 Shopify và POSCake, S29 Website, GA4 và Search Console, S30 Google Ads, TikTok Ads, lịch đăng chung và báo cáo |
+| 9–14 | Chưa bắt đầu |
 
 ## Sprint 1 (đã merge)
 
@@ -131,6 +132,18 @@ Cập nhật: 2026-11-28 · Giai đoạn hiện tại: **7 – Meta Platform (xo
 - 4 Connector mẫu: Telegram Bot, GitHub, n8n, Nhận đánh giá từ bên ngoài. Xuất/nhập tệp `maris.connector/v1` (không chứa khóa, kiểm tra checksum)
 - Trang `/connectors` (mục M35): danh sách, Chuẩn bị trước khi kích hoạt, Thử gọi, Nhật ký gọi, Webhook (địa chỉ, mã bí mật, lần nhận gần đây); bước Connector trong trình thiết kế Workflow
 - Giới hạn: chưa có OAuth (đăng nhập bằng tài khoản Google, Meta…), MCP Gateway, CLI Adapter, Local Worker; thao tác soạn bằng JSON; thao tác gửi ra ngoài trong Workflow không tự thử lại (tránh gửi trùng); nếu API dừng giữa lúc gọi, bước đó báo lỗi “bị ngắt giữa chừng”
+
+## Sprint 26 – Trung tâm Google và YouTube (Giai đoạn 8)
+
+- Migration `0026`: schema `google` với `apps` (OAuth client: Client ID, tên secret của Client secret, hạn mức YouTube mỗi ngày, cờ YouTube đã xét duyệt dự án), `connections` (tài khoản Google, refresh token niêm phong), `channels` (kênh YouTube), `youtube_uploads` (lượt tải lên); `integration.api_calls` thêm nhà cung cấp `google`, phương thức `PUT`, cột `units` (đơn vị hạn mức) và `google_channel_id`. Quyền `google.read`, `google.publish` (chủ, quản trị, quản lý), `google.manage` (chủ, quản trị)
+- Kết nối Google (đặc tả Phần 16, M18): mỗi doanh nghiệp dùng dự án Google Cloud của mình; Client secret nằm trong Secret Vault. Đăng nhập qua màn hình đồng ý của Google với `state` dùng một lần (10 phút) và PKCE S256, xin quyền theo từng dịch vụ (hiện có YouTube: xem kênh, tải video). Chức năng chỉ “sẵn sàng” khi Google thật sự cấp quyền. Tối đa 10 tài khoản Google (mỗi kênh thương hiệu một lần đăng nhập). Refresh token mã hóa AES-256-GCM, không về trình duyệt; mã truy cập chỉ giữ trong bộ nhớ. Ngắt kết nối báo Google thu hồi token
+- Cổng gọi Google (Phần 15): mọi lượt gọi ghi vào nhật ký với số đơn vị, không có token hay mã; hạn mức YouTube (mặc định 10.000 đơn vị/ngày, tải video 1.600) tính từ nửa đêm giờ Thái Bình Dương; 75% hoãn việc nền, 85% chỉ việc thiết yếu, 90% tạm dừng, không gửi lượt vượt hạn mức. Google báo hết hạn mức thì dừng tới ngày mới; báo giới hạn tốc độ thì dừng theo `Retry-After`; token bị thu hồi thì đánh dấu cần kết nối lại
+- Kênh YouTube (Phần 17, M20): đồng bộ tên, đường dẫn, người đăng ký, số video, trạng thái xác minh; bật tối đa 10 kênh
+- Tải video lên YouTube: chỉ thành phẩm video đã duyệt, kiểm định không lỗi. Video thường hoặc Shorts (dọc hoặc vuông, tối đa 3 phút), tiêu đề (100 ký tự, không `<` `>`), mô tả (5.000 byte), thẻ (500 ký tự), danh mục, chế độ hiển thị, câu hỏi “dành cho trẻ em” (bắt buộc), khai báo nội dung AI giống thật, ảnh bìa từ thành phẩm ảnh đã duyệt (JPEG/PNG, 2 MB). Kiểm tra hạn mức còn đủ trước khi xếp hàng; mỗi phiên bản một lần mỗi kênh
+- Bộ tải lên chạy mỗi 30 giây dùng resumable upload của YouTube: phiên tải lên được niêm phong; mất kết nối thì hỏi YouTube đã nhận bao nhiêu byte và gửi tiếp phần còn lại, không tạo video thứ hai. Sau khi tải xong đặt ảnh bìa (YouTube từ chối thì chỉ cảnh báo) rồi chờ YouTube xử lý tới 60 phút; YouTube từ chối thì báo lỗi kèm lý do
+- Hẹn giờ: video được tải lên ngay ở chế độ riêng tư với `publishAt`, YouTube tự công khai đúng giờ nên máy không cần bật lúc đó. Chỉ cho video Công khai và dự án đã được YouTube xét duyệt. Dự án chưa xét duyệt: MARIS tải lên ở chế độ Riêng tư và nói rõ, không giả vờ đăng công khai (đặc tả Phần 17)
+- Web: trang `/google` (Trung tâm Google: OAuth client, tài khoản, kênh, hạn mức hôm nay, lượt gọi), `/google/callback`, `/youtube` (Video YouTube: trạng thái, phần trăm đã tải, cảnh báo, Thử lại, Hủy); khung “Đăng lên YouTube” trong chi tiết thành phẩm video; mục M18 Google và M20 YouTube trên thanh bên
+- Giới hạn: chưa đọc phân tích video (lượt xem, thời gian xem), chưa quản lý bình luận YouTube, chưa sửa video đã đăng, chưa có danh sách phát; Google Ads, Analytics, Search Console, Merchant Center ở các sprint sau của Giai đoạn 8
 
 ## Sprint 25 – Trung tâm quảng cáo và phân tích chi tiêu (Giai đoạn 7, đã merge)
 
