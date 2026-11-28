@@ -279,16 +279,15 @@ describe('Sprint 21 (e2e): Meta connection and the API Governor', () => {
     });
     expect(Date.parse(s.connection.tokenExpiresAt) - Date.now()).toBeGreaterThan(59 * 86400_000);
     expect(
-      s.assets.map((a: { kind: string; name: string; enabled: boolean }) => [
-        a.kind,
-        a.name,
-        a.enabled,
-      ]),
+      // Name order depends on the database collation, so compare in a fixed order.
+      s.assets
+        .map((a: { kind: string; name: string; enabled: boolean }) => [a.kind, a.name, a.enabled])
+        .sort((x: string[], y: string[]) => `${x[0]}${x[1]}`.localeCompare(`${y[0]}${y[1]}`, 'en')),
     ).toEqual([
       ['ad_account', 'Quảng cáo Tú', true],
       ['instagram', 'Áo Thun Tú IG', true],
-      ['page', 'Tú Outlet', true],
       ['page', 'Áo Thun Tú', true],
+      ['page', 'Tú Outlet', true],
     ]);
     const ig = s.assets.find((a: { kind: string }) => a.kind === 'instagram');
     expect(ig).toMatchObject({
